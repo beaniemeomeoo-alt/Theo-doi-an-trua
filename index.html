@@ -95,7 +95,7 @@
 
           <button class="nav-tab" data-tab="settings">
             <span class="nav-tab-icon">⚙️</span>
-            <span class="nav-tab-label">Cài Đặt & Dữ Liệu</span>
+            <span class="nav-tab-label">Cài Đặt</span>
           </button>
         </div>
       </nav>
@@ -436,52 +436,6 @@
               </div>
             </div>
 
-            <!-- Data Backup & Restore -->
-            <div class="settings-card">
-              <div class="settings-card-header">
-                <span class="settings-icon">💾</span>
-                <div>
-                  <h3>Sao Lưu & Phục Hồi Dữ Liệu</h3>
-                  <p class="subtitle">Toàn bộ dữ liệu lưu trong trình duyệt. Bạn có thể xuất file dự phòng ra máy tính.</p>
-                </div>
-              </div>
-              <div class="settings-form-body">
-                <div class="backup-actions">
-                  <div class="backup-item">
-                    <h4>Xuất dữ liệu dự phòng (JSON)</h4>
-                    <p class="tip-text">Tải toàn bộ danh sách thành viên, lịch sử ăn cơm và thu tiền về máy tính.</p>
-                    <button id="btnExportJSON" class="btn btn-secondary btn-sm">
-                      📥 Tải file sao lưu (JSON)
-                    </button>
-                  </div>
-
-                  <div class="backup-item">
-                    <h4>Phục hồi từ file JSON</h4>
-                    <p class="tip-text">Tải lên file sao lưu đã lưu trước đó để khôi phục dữ liệu.</p>
-                    <label class="btn btn-subtle btn-sm btn-file-upload">
-                      📤 Chọn file phục hồi
-                      <input type="file" id="inputFileRestore" accept=".json" style="display:none;">
-                    </label>
-                  </div>
-
-                  <div class="backup-item">
-                    <h4>Dữ liệu mẫu trải nghiệm</h4>
-                    <p class="tip-text">Nạp dữ liệu mẫu gồm 6 người và lịch sử ăn cơm tháng này để dùng thử.</p>
-                    <button id="btnLoadSampleData" class="btn btn-accent btn-sm">
-                      ✨ Nạp dữ liệu mẫu
-                    </button>
-                  </div>
-
-                  <div class="backup-item danger-item">
-                    <h4>Xóa toàn bộ dữ liệu</h4>
-                    <p class="tip-text text-danger">Xóa sạch toàn bộ lịch sử điểm danh và danh sách người để bắt đầu lại.</p>
-                    <button id="btnResetAllData" class="btn btn-danger btn-sm">
-                      🗑️ Xóa trắng dữ liệu
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
 
           </div>
         </section>
@@ -673,6 +627,60 @@
         <div class="modal-footer">
           <button class="btn btn-subtle" data-close-modal="modalPayment">Đóng</button>
           <button id="btnConfirmPayment" class="btn btn-primary">Xác nhận đã thu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Delete Payment Management (Xóa Khoản Thu) -->
+    <div id="modalDeletePayment" class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>Quản Lý & Xóa Khoản Thu</h3>
+          <button class="modal-close" data-close-modal="modalDeletePayment">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="delPayModalMemberId">
+
+          <div class="payment-bill-summary">
+            <div class="bill-row">
+              <span>Thành viên:</span>
+              <strong id="delPayModalMemberName">Nguyễn Văn An</strong>
+            </div>
+            <div class="bill-row">
+              <span>Kỳ tính tiền:</span>
+              <span id="delPayModalPeriod">Tháng 10/2026</span>
+            </div>
+            <div class="bill-row">
+              <span>Tổng tiền ăn trong tháng:</span>
+              <span class="amount-primary" id="delPayModalTotalAmount">0đ</span>
+            </div>
+            <div class="bill-row">
+              <span>Đã thanh toán:</span>
+              <span class="amount-success" id="delPayModalPaidAmount" style="color: var(--success); font-weight: 700;">0đ</span>
+            </div>
+            <div class="bill-row bill-due">
+              <span>Còn thiếu:</span>
+              <span class="amount-danger" id="delPayModalDebt">0đ</span>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <div>
+                <label style="font-weight: 700; font-size: 13.5px; display: block;">Danh sách các khoản đã thu:</label>
+                <span style="font-size: 12px; color: var(--text-muted);">Bấm nút xóa ở khoản thu bạn muốn hủy:</span>
+              </div>
+              <button type="button" id="btnDeleteAllPaymentsForMember" class="btn btn-sm btn-danger" style="font-size: 11.5px; padding: 4px 10px;" title="Xóa toàn bộ các lần thu tháng này của người này">
+                🗑️ Xóa toàn bộ
+              </button>
+            </div>
+            <div id="delPaymentListContainer" class="pay-history-container" style="max-height: 250px;">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-subtle" data-close-modal="modalDeletePayment">Đóng</button>
         </div>
       </div>
     </div>

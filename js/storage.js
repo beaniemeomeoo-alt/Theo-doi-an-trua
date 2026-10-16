@@ -299,7 +299,18 @@ const Storage = {
 
   getMemberPayment(yearMonth, memberId) {
     const payments = this.getMonthPayments(yearMonth);
-    return payments[memberId] || { paid: 0, status: 'unpaid', history: [] };
+    const p = payments[memberId] || { paid: 0, status: 'unpaid', history: [] };
+    if (p.paid > 0 && (!p.history || p.history.length === 0)) {
+      p.history = [{
+        id: 'pay_legacy_' + memberId,
+        amount: Number(p.paid) || 0,
+        method: 'bank',
+        note: 'Khoản thu đã ghi nhận',
+        date: `${yearMonth}-01`,
+        createdAt: new Date().toISOString()
+      }];
+    }
+    return p;
   },
 
   recordPayment(yearMonth, memberId, amount, method = 'bank', note = '', date = '') {
