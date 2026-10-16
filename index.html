@@ -491,6 +491,20 @@
             <small class="form-hint">Mặc định 1 suất. Nếu có bạn/khách ăn cùng có thể chọn 2, 3 suất.</small>
           </div>
 
+          <div class="form-group" id="groupMealPrice">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label for="inputCellPrice" style="margin-bottom: 0;">Đơn giá bữa này (VNĐ):</label>
+              <button type="button" id="btnResetCellPrice" class="btn-chip" style="font-size: 11px; padding: 2px 8px; cursor: pointer;" title="Đặt lại theo giá mặc định chung">
+                ↺ Giá mặc định
+              </button>
+            </div>
+            <div class="input-with-addon">
+              <input type="number" id="inputCellPrice" step="1000" min="0" placeholder="VD: 30000">
+              <span class="addon">đ / suất</span>
+            </div>
+            <small class="form-hint" id="cellPriceHint">Mặc định theo cài đặt. Bạn có thể sửa riêng giá cho bữa ăn này nếu có phát sinh.</small>
+          </div>
+
           <div class="form-group">
             <label for="inputCellNote">Ghi chú (tùy chọn):</label>
             <input type="text" id="inputCellNote" placeholder="VD: Không lấy cơm, thêm canh, ăn muộn...">

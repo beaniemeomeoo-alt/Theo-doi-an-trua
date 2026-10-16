@@ -171,6 +171,7 @@ const Tracker = {
 
     let tbodyHtml = '';
     let grandTotalMeals = 0;
+    let grandTotalAmount = 0;
     let grandTotalPaid = 0;
     let grandTotalMissingDebt = 0;
     let unpaidMembersCount = 0;
@@ -181,6 +182,7 @@ const Tracker = {
 
     filteredMembers.forEach((member, index) => {
       let memberTotalMeals = 0;
+      let memberTotalAmount = 0;
 
       let rowHtml = `
         <tr data-member-id="${member.id}">
@@ -200,9 +202,12 @@ const Tracker = {
         const record = monthRecords[dateStr]?.[member.id];
         const count = record?.count || 0;
         const note = record?.note || '';
+        const customPrice = (record?.price !== undefined && record?.price !== null && record?.price !== '') ? Number(record.price) : null;
+        const itemPrice = (customPrice !== null && customPrice > 0) ? customPrice : unitPrice;
 
         if (count > 0) {
           memberTotalMeals += count;
+          memberTotalAmount += count * itemPrice;
           dayTotals[day] += count;
         }
 
@@ -218,30 +223,32 @@ const Tracker = {
         }
 
         const noteClass = note ? 'cell-has-note' : '';
-        const noteTitle = note ? ` (${note})` : '';
+        const customPriceClass = (customPrice !== null && customPrice > 0 && customPrice !== unitPrice) ? 'cell-has-custom-price' : '';
+        const priceInfo = (customPrice !== null && customPrice > 0 && customPrice !== unitPrice) ? ` (${customPrice.toLocaleString('vi-VN')}đ/suất)` : '';
+        const noteTitle = note ? ` [${note}]` : '';
 
         rowHtml += `
-          <td class="tracker-cell ${stateClass} ${isWeekend ? 'col-weekend' : ''} ${isToday ? 'col-today' : ''} ${noteClass}" 
+          <td class="tracker-cell ${stateClass} ${isWeekend ? 'col-weekend' : ''} ${isToday ? 'col-today' : ''} ${noteClass} ${customPriceClass}" 
               data-member-id="${member.id}" 
               data-member-name="${member.name}"
               data-date="${dateStr}" 
               data-count="${count}"
               data-note="${note.replace(/"/g, '&quot;')}"
-              title="${member.name} - Ngày ${day}/${month}: ${count > 0 ? count + ' suất' : 'Nghỉ'}${noteTitle}">
+              data-price="${customPrice || ''}"
+              title="${member.name} - Ngày ${day}/${month}: ${count > 0 ? count + ' suất' + priceInfo : 'Nghỉ'}${noteTitle}">
             <div class="cell-inner">${cellContent}</div>
           </td>
         `;
       });
 
-      const memberTotalAmount = memberTotalMeals * unitPrice;
       const paymentInfo = monthPayments[member.id] || { paid: 0 };
       const paidAmount = paymentInfo.paid || 0;
 
       // Tiền còn đóng thiếu: nếu tổng tiền ăn > tiền đã nộp thì còn thiếu; nếu đã nộp đủ thì = 0đ (không thiếu)
       const missingAmount = Math.max(0, memberTotalAmount - paidAmount);
-      const overpaidAmount = Math.max(0, paidAmount - memberTotalAmount);
 
       grandTotalMeals += memberTotalMeals;
+      grandTotalAmount += memberTotalAmount;
       grandTotalPaid += paidAmount;
       if (missingAmount > 0) {
         grandTotalMissingDebt += missingAmount;
@@ -288,8 +295,6 @@ const Tracker = {
         tfootHtml += `<td class="day-total-cell">${total > 0 ? total : '·'}</td>`;
       });
 
-      const grandTotalAmount = grandTotalMeals * unitPrice;
-
       tfootHtml += `
         <td class="col-summary col-sum-meals" style="font-size: 13.5px;">${grandTotalMeals}</td>
         <td class="col-summary col-sum-amount" style="font-size: 13.5px; color: var(--primary-700);">${grandTotalAmount.toLocaleString('vi-VN')}đ</td>
@@ -305,7 +310,7 @@ const Tracker = {
     this.attachCellInteractions();
 
     // 5. Update Metrics Cards
-    this.updateMetrics(grandTotalMeals, grandTotalMeals * unitPrice, grandTotalPaid, unitPrice, filteredMembers.length, unpaidMembersCount, grandTotalMissingDebt);
+    this.updateMetrics(grandTotalMeals, grandTotalAmount, grandTotalPaid, unitPrice, filteredMembers.length, unpaidMembersCount, grandTotalMissingDebt);
   },
 
   attachCellInteractions() {
@@ -445,7 +450,13 @@ const Tracker = {
     const count = parseInt(cell.getAttribute('data-count')) || 0;
     const note = cell.getAttribute('data-note') || '';
 
-    this.selectedCell = { memberId, memberName, dateStr, count, note };
+    // Retrieve custom price from record if present
+    const record = Storage.getDayRecords(dateStr)[memberId];
+    const customPrice = (record?.price !== undefined && record?.price !== null && record?.price !== '') ? Number(record.price) : null;
+    const settings = Storage.getSettings();
+    const defaultPrice = settings.mealPrice || 30000;
+
+    this.selectedCell = { memberId, memberName, dateStr, count, note, price: customPrice };
 
     document.getElementById('cellModalPersonName').textContent = memberName;
     document.getElementById('cellModalDateStr').textContent = dateStr;
@@ -455,22 +466,48 @@ const Tracker = {
     const inputQty = document.getElementById('inputCellQuantity');
     const inputNote = document.getElementById('inputCellNote');
     const qtyGroup = document.getElementById('groupMealQuantity');
+    const priceGroup = document.getElementById('groupMealPrice');
+    const inputPrice = document.getElementById('inputCellPrice');
+    const priceHint = document.getElementById('cellPriceHint');
+    const btnResetPrice = document.getElementById('btnResetCellPrice');
+
+    if (inputPrice) {
+      inputPrice.value = (customPrice !== null && customPrice > 0) ? customPrice : defaultPrice;
+    }
+    if (priceHint) {
+      priceHint.textContent = `Mặc định theo cài đặt: ${defaultPrice.toLocaleString('vi-VN')}đ/suất. Bạn có thể sửa riêng giá bữa này.`;
+    }
+
+    if (btnResetPrice) {
+      btnResetPrice.onclick = () => {
+        const def = Storage.getSettings().mealPrice || 30000;
+        if (inputPrice) inputPrice.value = def;
+      };
+    }
 
     if (count > 0) {
       radioYes.checked = true;
       inputQty.value = count;
       qtyGroup.style.display = 'block';
+      if (priceGroup) priceGroup.style.display = 'block';
     } else {
       radioNo.checked = true;
       inputQty.value = 1;
       qtyGroup.style.display = 'none';
+      if (priceGroup) priceGroup.style.display = 'none';
     }
 
     inputNote.value = note;
 
-    // Toggle qty input visibility on radio change
-    radioYes.onchange = () => qtyGroup.style.display = 'block';
-    radioNo.onchange = () => qtyGroup.style.display = 'none';
+    // Toggle qty & price input visibility on radio change
+    radioYes.onchange = () => {
+      qtyGroup.style.display = 'block';
+      if (priceGroup) priceGroup.style.display = 'block';
+    };
+    radioNo.onchange = () => {
+      qtyGroup.style.display = 'none';
+      if (priceGroup) priceGroup.style.display = 'none';
+    };
 
     App.openModal('modalCellEdit');
   },
@@ -481,9 +518,13 @@ const Tracker = {
     const isEating = document.getElementById('radioEatYes').checked;
     const qty = isEating ? Math.max(1, parseInt(document.getElementById('inputCellQuantity').value) || 1) : 0;
     const note = document.getElementById('inputCellNote').value.trim();
+    const inputPrice = document.getElementById('inputCellPrice');
+    const defaultPrice = Storage.getSettings().mealPrice || 30000;
+    const enteredPrice = (inputPrice && inputPrice.value) ? Number(inputPrice.value) : null;
+    const finalPrice = (enteredPrice !== null && enteredPrice > 0 && enteredPrice !== defaultPrice) ? enteredPrice : null;
 
     if (qty > 0) {
-      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: qty, note });
+      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: qty, note, price: finalPrice });
     } else {
       Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, null);
     }

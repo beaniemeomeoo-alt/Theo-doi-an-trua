@@ -68,6 +68,7 @@ const Exporter = {
 
     members.forEach((member, index) => {
       let memberMeals = 0;
+      let totalAmt = 0;
       const rowCols = [
         `"${index + 1}"`,
         `"${member.name}"`
@@ -81,13 +82,14 @@ const Exporter = {
         if (count > 0) {
           memberMeals += count;
           dayTotals[d] += count;
+          const p = (rec.price !== undefined && rec.price !== null && rec.price !== '') ? Number(rec.price) : unitPrice;
+          totalAmt += count * p;
           rowCols.push(`"${count}"`);
         } else {
           rowCols.push('""');
         }
       }
 
-      const totalAmt = memberMeals * unitPrice;
       const paymentInfo = monthPayments[member.id] || { paid: 0 };
       const paid = paymentInfo.paid || 0;
       const debt = Math.max(0, totalAmt - paid);

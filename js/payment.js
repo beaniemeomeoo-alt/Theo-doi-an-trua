@@ -91,13 +91,32 @@ const Payment = {
     }
   },
 
-  render() {
-    const yearMonth = Tracker.getYearMonthStr();
+  getMemberMonthBilling(memberId, yearMonth) {
     const settings = Storage.getSettings();
     const unitPrice = settings.mealPrice || 30000;
-    const members = Storage.getMembers();
     const monthRecords = Storage.getMonthRecords(yearMonth);
-    const monthPayments = Storage.getMonthPayments(yearMonth);
+    const paymentInfo = Storage.getMemberPayment(yearMonth, memberId);
+
+    let meals = 0;
+    let totalAmount = 0;
+    Object.keys(monthRecords).forEach(d => {
+      const rec = monthRecords[d]?.[memberId];
+      if (rec && rec.count > 0) {
+        meals += rec.count;
+        const itemPrice = (rec.price !== undefined && rec.price !== null && rec.price !== '') ? Number(rec.price) : unitPrice;
+        totalAmount += rec.count * itemPrice;
+      }
+    });
+
+    const paidAmount = paymentInfo.paid || 0;
+    const debt = Math.max(0, totalAmount - paidAmount);
+
+    return { meals, totalAmount, paidAmount, debt, paymentInfo, unitPrice };
+  },
+
+  render() {
+    const yearMonth = Tracker.getYearMonthStr();
+    const members = Storage.getMembers();
 
     let countAll = 0;
     let countUnpaid = 0;
@@ -106,19 +125,8 @@ const Payment = {
     const memberBillingList = [];
 
     members.forEach(member => {
-      // Calculate member meals in month
-      let meals = 0;
-      Object.keys(monthRecords).forEach(dateStr => {
-        const rec = monthRecords[dateStr]?.[member.id];
-        if (rec && rec.count > 0) {
-          meals += rec.count;
-        }
-      });
-
-      const totalAmount = meals * unitPrice;
-      const paymentInfo = monthPayments[member.id] || { paid: 0, history: [] };
-      const paidAmount = paymentInfo.paid || 0;
-      const debt = Math.max(0, totalAmount - paidAmount);
+      const billing = this.getMemberMonthBilling(member.id, yearMonth);
+      const { meals, totalAmount, paidAmount, debt, paymentInfo } = billing;
 
       let status = 'none';
       if (totalAmount > 0) {
@@ -241,20 +249,8 @@ const Payment = {
     if (!member) return;
 
     const yearMonth = Tracker.getYearMonthStr();
-    const settings = Storage.getSettings();
-    const unitPrice = settings.mealPrice || 30000;
-    const monthRecords = Storage.getMonthRecords(yearMonth);
-    const paymentInfo = Storage.getMemberPayment(yearMonth, memberId);
-
-    let meals = 0;
-    Object.keys(monthRecords).forEach(d => {
-      const rec = monthRecords[d]?.[memberId];
-      if (rec && rec.count > 0) meals += rec.count;
-    });
-
-    const totalAmount = meals * unitPrice;
-    const paidAmount = paymentInfo.paid || 0;
-    const debt = Math.max(0, totalAmount - paidAmount);
+    const billing = this.getMemberMonthBilling(memberId, yearMonth);
+    const { meals, totalAmount, paidAmount, debt, paymentInfo } = billing;
 
     this.activeMemberForPay = {
       memberId,
@@ -312,21 +308,10 @@ const Payment = {
     if (!member) return;
 
     const yearMonth = Tracker.getYearMonthStr();
+    const billing = this.getMemberMonthBilling(memberId, yearMonth);
+    const { debt } = billing;
+
     const settings = Storage.getSettings();
-    const unitPrice = settings.mealPrice || 30000;
-    const monthRecords = Storage.getMonthRecords(yearMonth);
-    const paymentInfo = Storage.getMemberPayment(yearMonth, memberId);
-
-    let meals = 0;
-    Object.keys(monthRecords).forEach(d => {
-      const rec = monthRecords[d]?.[memberId];
-      if (rec && rec.count > 0) meals += rec.count;
-    });
-
-    const totalAmount = meals * unitPrice;
-    const paidAmount = paymentInfo.paid || 0;
-    const debt = Math.max(0, totalAmount - paidAmount);
-
     const bankInfo = settings.bankInfo || {};
     const bankCode = bankInfo.bankCode || 'MB';
     const accNum = bankInfo.accountNumber || '';
@@ -376,21 +361,10 @@ const Payment = {
     if (!member) return;
 
     const yearMonth = Tracker.getYearMonthStr();
+    const billing = this.getMemberMonthBilling(memberId, yearMonth);
+    const { meals, totalAmount, paidAmount, debt, unitPrice } = billing;
+
     const settings = Storage.getSettings();
-    const unitPrice = settings.mealPrice || 30000;
-    const monthRecords = Storage.getMonthRecords(yearMonth);
-    const paymentInfo = Storage.getMemberPayment(yearMonth, memberId);
-
-    let meals = 0;
-    Object.keys(monthRecords).forEach(d => {
-      const rec = monthRecords[d]?.[memberId];
-      if (rec && rec.count > 0) meals += rec.count;
-    });
-
-    const totalAmount = meals * unitPrice;
-    const paidAmount = paymentInfo.paid || 0;
-    const debt = Math.max(0, totalAmount - paidAmount);
-
     const bankInfo = settings.bankInfo || {};
     const cleanName = this.removeVietnameseTones(member.name).toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim();
     const memo = `TIEN COM T${Tracker.currentMonth} ${cleanName}`.substring(0, 25);
@@ -467,20 +441,8 @@ const Payment = {
     if (!member) return;
 
     const yearMonth = Tracker.getYearMonthStr();
-    const settings = Storage.getSettings();
-    const unitPrice = settings.mealPrice || 30000;
-    const monthRecords = Storage.getMonthRecords(yearMonth);
-    const paymentInfo = Storage.getMemberPayment(yearMonth, memberId);
-
-    let meals = 0;
-    Object.keys(monthRecords).forEach(d => {
-      const rec = monthRecords[d]?.[memberId];
-      if (rec && rec.count > 0) meals += rec.count;
-    });
-
-    const totalAmount = meals * unitPrice;
-    const paidAmount = paymentInfo.paid || 0;
-    const debt = Math.max(0, totalAmount - paidAmount);
+    const billing = this.getMemberMonthBilling(memberId, yearMonth);
+    const { totalAmount, paidAmount, debt, paymentInfo } = billing;
 
     document.getElementById('delPayModalMemberId').value = memberId;
     document.getElementById('delPayModalMemberName').textContent = member.name;

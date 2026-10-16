@@ -225,6 +225,7 @@ const Storage = {
 
     const count = recordObj ? Number(recordObj.count) || 0 : 0;
     const note = recordObj ? (recordObj.note || '').trim() : '';
+    const price = (recordObj && recordObj.price !== undefined && recordObj.price !== null && recordObj.price !== '') ? Number(recordObj.price) : null;
 
     if (count <= 0) {
       delete data.records[dateStr][memberId];
@@ -232,7 +233,9 @@ const Storage = {
         delete data.records[dateStr];
       }
     } else {
-      data.records[dateStr][memberId] = { count, note };
+      const entry = { count, note };
+      if (price !== null && price > 0) entry.price = price;
+      data.records[dateStr][memberId] = entry;
     }
 
     this.saveData(data);
@@ -241,7 +244,7 @@ const Storage = {
       fetch('/api/records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: dateStr, memberId, count, note })
+        body: JSON.stringify({ date: dateStr, memberId, count, note, price })
       }).catch(err => console.error('Cloud sync error:', err));
     }
   },

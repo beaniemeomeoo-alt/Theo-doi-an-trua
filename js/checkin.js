@@ -105,6 +105,7 @@ const Checkin = {
 
     let totalMealsToday = 0;
     let peopleEatingToday = 0;
+    let totalCostToday = 0;
 
     const container = document.getElementById('checkinMemberList');
     if (!container) return;
@@ -119,7 +120,7 @@ const Checkin = {
           </button>
         </div>
       `;
-      this.updateDayStats(0, 0, 0, unitPrice);
+      this.updateDayStats(0, 0, 0, 0);
       return;
     }
 
@@ -130,10 +131,12 @@ const Checkin = {
       const isEating = !!(record && record.count > 0);
       const count = isEating ? record.count : 1;
       const note = record?.note || '';
+      const itemPrice = (record?.price !== undefined && record?.price !== null && record?.price !== '') ? Number(record.price) : unitPrice;
 
       if (isEating) {
         peopleEatingToday++;
         totalMealsToday += count;
+        totalCostToday += count * itemPrice;
       }
 
       // Generate initials for avatar
@@ -174,7 +177,7 @@ const Checkin = {
 
     container.innerHTML = cardsHtml;
     this.attachCardInteractions(members);
-    this.updateDayStats(totalMealsToday, peopleEatingToday, members.length, unitPrice);
+    this.updateDayStats(totalMealsToday, peopleEatingToday, members.length, totalCostToday);
 
     // Update Header Badge for Today's meals if this is today
     if (this.selectedDate === this.getTodayDateStr()) {
@@ -259,10 +262,9 @@ const Checkin = {
     if (window.Payment) Payment.render();
   },
 
-  updateDayStats(totalMeals, peopleEating, totalPeople, unitPrice) {
-    const cost = totalMeals * unitPrice;
+  updateDayStats(totalMeals, peopleEating, totalPeople, totalCost) {
     document.getElementById('todayTotalMealsStat').textContent = `${totalMeals} suất`;
-    document.getElementById('todayTotalCostStat').textContent = `${cost.toLocaleString('vi-VN')} đ`;
+    document.getElementById('todayTotalCostStat').textContent = `${totalCost.toLocaleString('vi-VN')} đ`;
     document.getElementById('todayPeopleCountStat').textContent = `${peopleEating} / ${totalPeople} người`;
   },
 

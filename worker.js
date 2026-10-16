@@ -69,7 +69,7 @@ async function handleApi(request, env, url) {
     const [settingsRes, membersRes, recordsRes, paymentsRes] = await db.batch([
       db.prepare('SELECT key, value FROM settings'),
       db.prepare('SELECT id, name, phone, note, active, created_at FROM members ORDER BY name ASC'),
-      db.prepare("SELECT date, member_id, count, note FROM meal_records WHERE date LIKE ?").bind(`${month}-%`),
+      db.prepare("SELECT date, member_id, count, note, price FROM meal_records WHERE date LIKE ?").bind(`${month}-%`),
       db.prepare('SELECT member_id, paid, history_json FROM payments WHERE year_month = ?').bind(month)
     ]);
 
@@ -91,13 +91,14 @@ async function handleApi(request, env, url) {
       else if (row.key === 'theme') settings.theme = row.value;
     });
 
-    // Parse records into map: date -> { member_id -> { count, note } }
+    // Parse records into map: date -> { member_id -> { count, note, price } }
     const records = {};
     (recordsRes.results || []).forEach(r => {
       if (!records[r.date]) records[r.date] = {};
       records[r.date][r.member_id] = {
         count: r.count,
-        note: r.note || ''
+        note: r.note || '',
+        price: (r.price !== undefined && r.price !== null) ? Number(r.price) : null
       };
     });
 
@@ -172,21 +173,23 @@ async function handleApi(request, env, url) {
   // POST /api/records (Single update)
   if (path === '/api/records' && method === 'POST') {
     const body = await request.json();
-    const { date, memberId, count, note } = body;
+    const { date, memberId, count, note, price } = body;
     if (!date || !memberId) return errorResponse('Missing date or memberId');
 
     const numCount = Number(count) || 0;
+    const numPrice = (price !== undefined && price !== null && price !== '') ? Number(price) : null;
     if (numCount <= 0) {
       await db.prepare('DELETE FROM meal_records WHERE date = ? AND member_id = ?').bind(date, memberId).run();
     } else {
       await db.prepare(`
-        INSERT INTO meal_records (date, member_id, count, note, updated_at)
-        VALUES (?, ?, ?, ?, datetime('now', '+7 hours'))
+        INSERT INTO meal_records (date, member_id, count, note, price, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now', '+7 hours'))
         ON CONFLICT(date, member_id) DO UPDATE SET
           count = excluded.count,
           note = excluded.note,
+          price = excluded.price,
           updated_at = excluded.updated_at
-      `).bind(date, memberId, numCount, (note || '').trim()).run();
+      `).bind(date, memberId, numCount, (note || '').trim(), numPrice).run();
     }
 
     return jsonResponse({ success: true });
@@ -202,17 +205,19 @@ async function handleApi(request, env, url) {
 
     const statements = updates.map(item => {
       const numCount = Number(item.count) || 0;
+      const numPrice = (item.price !== undefined && item.price !== null && item.price !== '') ? Number(item.price) : null;
       if (numCount <= 0) {
         return db.prepare('DELETE FROM meal_records WHERE date = ? AND member_id = ?').bind(item.date, item.memberId);
       } else {
         return db.prepare(`
-          INSERT INTO meal_records (date, member_id, count, note, updated_at)
-          VALUES (?, ?, ?, ?, datetime('now', '+7 hours'))
+          INSERT INTO meal_records (date, member_id, count, note, price, updated_at)
+          VALUES (?, ?, ?, ?, ?, datetime('now', '+7 hours'))
           ON CONFLICT(date, member_id) DO UPDATE SET
             count = excluded.count,
             note = excluded.note,
+            price = excluded.price,
             updated_at = excluded.updated_at
-        `).bind(item.date, item.memberId, numCount, (item.note || '').trim());
+        `).bind(item.date, item.memberId, numCount, (item.note || '').trim(), numPrice);
       }
     });
 

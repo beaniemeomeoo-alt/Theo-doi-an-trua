@@ -383,6 +383,17 @@ body.is-drag-painting .tracker-cell {
   background: var(--accent-orange);
 }
 
+.cell-has-custom-price::before {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--primary-600);
+}
+
 /* Footer Row */
 .tracker-table tfoot th,
 .tracker-table tfoot td {
