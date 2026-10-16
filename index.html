@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Theo Dõi Cơm Trưa & Quản Lý Thu Tiền</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body class="theme-light">
+  <div id="app" class="app-layout">
+    
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="header-container">
+        <div class="brand">
+          <div class="brand-icon">🍚</div>
+          <div class="brand-info">
+            <h1 class="brand-title">Cơm Trưa Pro</h1>
+            <span class="brand-subtitle">Theo dõi suất ăn & Thu tiền cơm</span>
+          </div>
+        </div>
+
+        <!-- Global Month/Period Selector -->
+        <div class="month-selector-bar">
+          <button id="btnPrevMonth" class="btn-icon" title="Tháng trước">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          
+          <div class="current-month-display">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span id="labelCurrentMonth">Tháng 10 / 2026</span>
+            <input type="month" id="inputMonthPicker" class="month-picker-hidden">
+          </div>
+
+          <button id="btnNextMonth" class="btn-icon" title="Tháng sau">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+
+          <button id="btnToday" class="btn btn-sm btn-subtle" title="Về tháng & ngày hiện tại">
+            Hôm nay
+          </button>
+        </div>
+
+        <!-- Header Actions -->
+        <div class="header-actions">
+          <div class="price-chip" id="btnQuickPrice" title="Bấm để đổi giá cơm">
+            <span class="price-label">Giá suất:</span>
+            <span class="price-value" id="headerPriceDisplay">30.000đ</span>
+          </div>
+
+          <button id="btnThemeToggle" class="btn-icon" title="Đổi giao diện Sáng / Tối">
+            <span class="theme-icon-light">🌙</span>
+            <span class="theme-icon-dark">☀️</span>
+          </button>
+
+          <button id="btnOpenNewMember" class="btn btn-primary btn-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>Thêm người</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="app-nav">
+        <div class="nav-container">
+          <button class="nav-tab active" data-tab="tracker">
+            <span class="nav-tab-icon">📅</span>
+            <span class="nav-tab-label">Bảng Theo Dõi Tháng</span>
+          </button>
+          
+          <button class="nav-tab" data-tab="checkin">
+            <span class="nav-tab-icon">✅</span>
+            <span class="nav-tab-label">Điểm Danh Hôm Nay</span>
+            <span class="nav-badge" id="todayCountBadge">0</span>
+          </button>
+
+          <button class="nav-tab" data-tab="payments">
+            <span class="nav-tab-icon">💰</span>
+            <span class="nav-tab-label">Sổ Thu Tiền & Công Nợ</span>
+            <span class="nav-badge badge-warning" id="unpaidCountBadge">0</span>
+          </button>
+
+          <button class="nav-tab" data-tab="members">
+            <span class="nav-tab-icon">👥</span>
+            <span class="nav-tab-label">Danh Sách Thành Viên</span>
+          </button>
+
+          <button class="nav-tab" data-tab="settings">
+            <span class="nav-tab-icon">⚙️</span>
+            <span class="nav-tab-label">Cài Đặt & Dữ Liệu</span>
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <div class="main-container">
+        
+        <!-- ================= TAB 1: MONTH TRACKER (BẢNG THÁNG) ================= -->
+        <section id="tab-tracker" class="tab-pane active">
+          <!-- Summary Metrics Cards -->
+          <div class="metrics-grid">
+            <div class="metric-card metric-primary">
+              <div class="metric-header">
+                <span class="metric-title">Tổng Suất Cơm Tháng</span>
+                <span class="metric-icon">🍱</span>
+              </div>
+              <div class="metric-body">
+                <span class="metric-value" id="metricTotalMeals">0</span>
+                <span class="metric-unit">suất</span>
+              </div>
+              <div class="metric-footer" id="metricActiveMembersText">
+                Đang có 0 người tham gia
+              </div>
+            </div>
+
+            <div class="metric-card metric-success">
+              <div class="metric-header">
+                <span class="metric-title">Tổng Tiền Cơm Tháng</span>
+                <span class="metric-icon">💵</span>
+              </div>
+              <div class="metric-body">
+                <span class="metric-value" id="metricTotalAmount">0</span>
+                <span class="metric-unit">VNĐ</span>
+              </div>
+              <div class="metric-footer" id="metricAveragePerPerson">
+                Trung bình 0đ / người
+              </div>
+            </div>
+
+            <div class="metric-card metric-info">
+              <div class="metric-header">
+                <span class="metric-title">Tiền Đã Thu Được</span>
+                <span class="metric-icon">💳</span>
+              </div>
+              <div class="metric-body">
+                <span class="metric-value" id="metricTotalPaid">0</span>
+                <span class="metric-unit">VNĐ</span>
+              </div>
+              <div class="metric-progress-wrapper">
+                <div class="progress-bar-bg">
+                  <div class="progress-bar-fill" id="metricPaidPercentBar" style="width: 0%"></div>
+                </div>
+                <span class="progress-text" id="metricPaidPercentText">0%</span>
+              </div>
+            </div>
+
+            <div class="metric-card metric-warning">
+              <div class="metric-header">
+                <span class="metric-title">Còn Cần Thu (Nợ)</span>
+                <span class="metric-icon">⏳</span>
+              </div>
+              <div class="metric-body">
+                <span class="metric-value" id="metricTotalDebt">0</span>
+                <span class="metric-unit">VNĐ</span>
+              </div>
+              <div class="metric-footer" id="metricUnpaidPersons">
+                0 người chưa nộp đủ
+              </div>
+            </div>
+          </div>
+
+          <!-- Tracker Action Controls Bar -->
+          <div class="toolbar-card">
+            <div class="toolbar-left">
+              <div class="search-input-wrapper">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="inputSearchMember" placeholder="Tìm tên thành viên...">
+              </div>
+
+              <div class="filter-group">
+                <label class="filter-item">
+                  <input type="checkbox" id="checkOnlyActive" checked>
+                  <span>Chỉ người đang ăn</span>
+                </label>
+                <label class="filter-item">
+                  <input type="checkbox" id="checkHideWeekend">
+                  <span>Ẩn Thứ 7 & CN</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="toolbar-right">
+              <div class="legend-items">
+                <span class="legend-badge legend-eat" title="Ăn cơm bình thường">✅ Ăn</span>
+                <span class="legend-badge legend-extra" title="Ăn nhiều suất (>1)">2️⃣ Nhiều suất</span>
+                <span class="legend-badge legend-none" title="Nghỉ cơm">· Nghỉ</span>
+                <span class="legend-badge legend-note" title="Có ghi chú riêng">💬 Ghi chú</span>
+              </div>
+
+              <button id="btnExportMonthCSV" class="btn btn-secondary btn-sm" title="Tải file Excel / CSV cho tháng này">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span>Xuất Excel</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Grid Table Container -->
+          <div class="tracker-table-card">
+            <div class="table-scroll-wrapper" id="trackerScrollWrapper">
+              <table class="tracker-table" id="trackerGridTable">
+                <!-- Dynamically built by JS -->
+                <thead>
+                  <tr id="trackerHeaderRow"></tr>
+                </thead>
+                <tbody id="trackerTableBody"></tbody>
+                <tfoot>
+                  <tr id="trackerFooterRow"></tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div class="table-tip">
+              💡 <strong>Mẹo:</strong> Nhấp chuột hoặc <strong>nhấp giữ & kéo chuột (Drag)</strong> qua các ô ngày để đánh dấu nhanh nhiều ngày liên tiếp. Nhấp đúp chuột (hoặc chuột phải) để chỉnh số suất hoặc thêm ghi chú.
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 2: DAILY CHECK-IN (ĐIỂM DANH HÀNG NGÀY) ================= -->
+        <section id="tab-checkin" class="tab-pane">
+          <div class="checkin-container">
+            
+            <!-- Checkin Date Header Card -->
+            <div class="checkin-date-card">
+              <div class="checkin-date-controls">
+                <button id="btnCheckinPrevDay" class="btn btn-subtle btn-sm">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                  <span>Hôm trước</span>
+                </button>
+
+                <div class="checkin-current-date">
+                  <input type="date" id="inputCheckinDate" class="date-input-styled">
+                  <span class="checkin-date-weekday" id="labelCheckinWeekday">Thứ Sáu, 16/10/2026</span>
+                </div>
+
+                <button id="btnCheckinNextDay" class="btn btn-subtle btn-sm">
+                  <span>Hôm sau</span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+
+                <button id="btnCheckinGoToday" class="btn btn-primary btn-sm">Về Hôm Nay</button>
+              </div>
+
+              <!-- Quick Status Cards for This Day -->
+              <div class="checkin-summary-pills">
+                <div class="summary-pill pill-primary">
+                  <span class="pill-label">Tổng suất hôm nay:</span>
+                  <span class="pill-value" id="todayTotalMealsStat">0 suất</span>
+                </div>
+                <div class="summary-pill pill-success">
+                  <span class="pill-label">Dự tính tiền:</span>
+                  <span class="pill-value" id="todayTotalCostStat">0 đ</span>
+                </div>
+                <div class="summary-pill pill-muted">
+                  <span class="pill-label">Số người ăn:</span>
+                  <span class="pill-value" id="todayPeopleCountStat">0 / 0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="checkin-actions-bar">
+              <div class="action-buttons-group">
+                <button id="btnCheckAllToday" class="btn btn-secondary btn-sm">
+                  ✅ Chọn tất cả ăn
+                </button>
+                <button id="btnUncheckAllToday" class="btn btn-subtle btn-sm">
+                  ❌ Bỏ chọn tất cả
+                </button>
+              </div>
+
+              <div class="action-buttons-group">
+                <button id="btnCopyOrderList" class="btn btn-accent btn-sm" title="Copy danh sách người ăn để gửi quán cơm hoặc nhóm chat">
+                  📋 Copy danh sách đặt cơm
+                </button>
+              </div>
+            </div>
+
+            <!-- Member Check-in List -->
+            <div class="checkin-grid" id="checkinMemberList">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 3: PAYMENTS (SỔ THU TIỀN & CÔNG NỢ) ================= -->
+        <section id="tab-payments" class="tab-pane">
+          <!-- Payment Filter and Overview -->
+          <div class="payments-header-card">
+            <div class="payments-title-group">
+              <h2>Sổ Thu Tiền Cơm <span id="labelPaymentMonth">Tháng 10/2026</span></h2>
+              <p class="subtitle">Quản lý theo dõi ai đã nộp tiền, ai còn nợ, tạo mã VietQR chuyển khoản nhanh</p>
+            </div>
+
+            <div class="payments-filter-chips">
+              <button class="chip active" data-pay-filter="all">Tất cả (<span id="payCountAll">0</span>)</button>
+              <button class="chip chip-warning" data-pay-filter="unpaid">Chưa thu / Còn nợ (<span id="payCountUnpaid">0</span>)</button>
+              <button class="chip chip-success" data-pay-filter="paid">Đã thu đủ (<span id="payCountPaid">0</span>)</button>
+            </div>
+          </div>
+
+          <!-- Payment Table Card -->
+          <div class="payment-table-card">
+            <div class="table-scroll-wrapper">
+              <table class="styled-table" id="paymentsTable">
+                <thead>
+                  <tr>
+                    <th style="width: 50px;">STT</th>
+                    <th>Thành viên</th>
+                    <th style="text-align: center;">Số suất ăn</th>
+                    <th style="text-align: right;">Thành tiền</th>
+                    <th style="text-align: right;">Đã nộp</th>
+                    <th style="text-align: right;">Còn lại (Nợ)</th>
+                    <th style="text-align: center;">Trạng thái</th>
+                    <th style="text-align: center; width: 220px;">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentTableBody">
+                  <!-- Rendered by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 4: MEMBERS (QUẢN LÝ THÀNH VIÊN) ================= -->
+        <section id="tab-members" class="tab-pane">
+          <div class="members-view-container">
+            <div class="view-header-bar">
+              <div>
+                <h2>Danh Sách Thành Viên Ăn Cơm</h2>
+                <p class="subtitle">Thêm thành viên, chỉnh sửa thông tin hoặc tạm dừng khi ai đó nghỉ phép</p>
+              </div>
+              <button id="btnCreateMemberModal" class="btn btn-primary">
+                + Thêm thành viên mới
+              </button>
+            </div>
+
+            <div class="members-grid-container" id="membersCardGrid">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 5: SETTINGS & BACKUP ================= -->
+        <section id="tab-settings" class="tab-pane">
+          <div class="settings-container">
+            
+            <!-- Meal Price Settings -->
+            <div class="settings-card">
+              <div class="settings-card-header">
+                <span class="settings-icon">💰</span>
+                <div>
+                  <h3>Giá Cơm & Quy Tắc</h3>
+                  <p class="subtitle">Cấu hình đơn giá mỗi suất cơm trưa</p>
+                </div>
+              </div>
+              <div class="settings-form-body">
+                <div class="form-group">
+                  <label for="inputSettingPrice">Đơn giá 1 suất cơm (VNĐ):</label>
+                  <div class="input-with-addon">
+                    <input type="number" id="inputSettingPrice" min="1000" step="1000" value="30000">
+                    <span class="addon">đ / suất</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label>Ngày ăn cơm mặc định trong tuần:</label>
+                  <div class="checkbox-row">
+                    <label class="checkbox-label"><input type="checkbox" name="workday" value="1" checked> T2</label>
+                    <label class="checkbox-label"><input type="checkbox" name="workday" value="2" checked> T3</label>
+                    <label class="checkbox-label"><input type="checkbox" name="workday" value="3" checked> T4</label>
+                    <label class="checkbox-label"><input type="checkbox" name="workday" value="4" checked> T5</label>
+                    <label class="checkbox-label"><input type="checkbox" name="workday" value="5" checked> T6</label>
+                    <label class="checkbox-label"><input type="checkbox" name="workday" value="6"> T7</label>
+                    <label class="checkbox-label"><input type="checkbox" name="workday" value="0"> CN</label>
+                  </div>
+                </div>
+
+                <button id="btnSavePriceSetting" class="btn btn-primary btn-sm">Lưu cài đặt</button>
+              </div>
+            </div>
+
+            <!-- VietQR Bank Account Settings -->
+            <div class="settings-card">
+              <div class="settings-card-header">
+                <span class="settings-icon">🏦</span>
+                <div>
+                  <h3>Tài Khoản Nhận Tiền (VietQR)</h3>
+                  <p class="subtitle">Cấu hình để tự động sinh mã QR chuyển khoản khi thu tiền</p>
+                </div>
+              </div>
+              <div class="settings-form-body">
+                <div class="form-grid-2">
+                  <div class="form-group">
+                    <label for="inputBankName">Ngân hàng:</label>
+                    <select id="selectBankCode" class="form-select">
+                      <option value="MB">MBBank (Quân Đội)</option>
+                      <option value="VCB">Vietcombank</option>
+                      <option value="TCB">Techcombank</option>
+                      <option value="VPB">VPBank</option>
+                      <option value="ACB">ACB</option>
+                      <option value="BIDV">BIDV</option>
+                      <option value="VIB">VIB</option>
+                      <option value="TPB">TPBank</option>
+                      <option value="MSB">MSB</option>
+                      <option value="OCB">OCB</option>
+                      <option value="HDB">HDBank</option>
+                      <option value="SHB">SHB</option>
+                      <option value="VBA">Agribank</option>
+                      <option value="CAKE">CAKE by VPBank</option>
+                      <option value="TIMO">Timo</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="inputAccountNumber">Số tài khoản:</label>
+                    <input type="text" id="inputAccountNumber" placeholder="VD: 0987654321">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="inputAccountName">Tên chủ tài khoản (không dấu):</label>
+                  <input type="text" id="inputAccountName" placeholder="VD: NGUYEN VAN A">
+                </div>
+
+                <button id="btnSaveBankSetting" class="btn btn-primary btn-sm">Lưu thông tin ngân hàng</button>
+              </div>
+            </div>
+
+            <!-- Data Backup & Restore -->
+            <div class="settings-card">
+              <div class="settings-card-header">
+                <span class="settings-icon">💾</span>
+                <div>
+                  <h3>Sao Lưu & Phục Hồi Dữ Liệu</h3>
+                  <p class="subtitle">Toàn bộ dữ liệu lưu trong trình duyệt. Bạn có thể xuất file dự phòng ra máy tính.</p>
+                </div>
+              </div>
+              <div class="settings-form-body">
+                <div class="backup-actions">
+                  <div class="backup-item">
+                    <h4>Xuất dữ liệu dự phòng (JSON)</h4>
+                    <p class="tip-text">Tải toàn bộ danh sách thành viên, lịch sử ăn cơm và thu tiền về máy tính.</p>
+                    <button id="btnExportJSON" class="btn btn-secondary btn-sm">
+                      📥 Tải file sao lưu (JSON)
+                    </button>
+                  </div>
+
+                  <div class="backup-item">
+                    <h4>Phục hồi từ file JSON</h4>
+                    <p class="tip-text">Tải lên file sao lưu đã lưu trước đó để khôi phục dữ liệu.</p>
+                    <label class="btn btn-subtle btn-sm btn-file-upload">
+                      📤 Chọn file phục hồi
+                      <input type="file" id="inputFileRestore" accept=".json" style="display:none;">
+                    </label>
+                  </div>
+
+                  <div class="backup-item">
+                    <h4>Dữ liệu mẫu trải nghiệm</h4>
+                    <p class="tip-text">Nạp dữ liệu mẫu gồm 6 người và lịch sử ăn cơm tháng này để dùng thử.</p>
+                    <button id="btnLoadSampleData" class="btn btn-accent btn-sm">
+                      ✨ Nạp dữ liệu mẫu
+                    </button>
+                  </div>
+
+                  <div class="backup-item danger-item">
+                    <h4>Xóa toàn bộ dữ liệu</h4>
+                    <p class="tip-text text-danger">Xóa sạch toàn bộ lịch sử điểm danh và danh sách người để bắt đầu lại.</p>
+                    <button id="btnResetAllData" class="btn btn-danger btn-sm">
+                      🗑️ Xóa trắng dữ liệu
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-container">
+        <span>🍚 Cơm Trưa Pro — Hệ thống quản lý & thu tiền cơm trưa</span>
+        <span class="footer-sep">·</span>
+        <span>Lưu trữ cục bộ LocalStorage</span>
+      </div>
+    </footer>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Modal 1: Quick Cell Edit (Số suất / Ghi chú cho 1 người 1 ngày) -->
+    <div id="modalCellEdit" class="modal-overlay">
+      <div class="modal-box modal-sm">
+        <div class="modal-header">
+          <h3 id="cellModalTitle">Chi tiết suất ăn</h3>
+          <button class="modal-close" data-close-modal="modalCellEdit">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="cell-modal-info">
+            <div class="person-tag" id="cellModalPersonName">Nguyễn Văn A</div>
+            <div class="date-tag" id="cellModalDateStr">16/10/2026</div>
+          </div>
+
+          <div class="form-group">
+            <label>Trạng thái ăn:</label>
+            <div class="radio-toggle-group">
+              <label class="radio-pill">
+                <input type="radio" name="cellEatStatus" value="1" id="radioEatYes">
+                <span>✅ Ăn cơm</span>
+              </label>
+              <label class="radio-pill">
+                <input type="radio" name="cellEatStatus" value="0" id="radioEatNo">
+                <span>❌ Nghỉ</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group" id="groupMealQuantity">
+            <label for="inputCellQuantity">Số suất ăn:</label>
+            <div class="quantity-input-group">
+              <button type="button" class="btn-qty" id="btnQtyMinus">-</button>
+              <input type="number" id="inputCellQuantity" min="1" max="10" value="1">
+              <button type="button" class="btn-qty" id="btnQtyPlus">+</button>
+            </div>
+            <small class="form-hint">Mặc định 1 suất. Nếu có bạn/khách ăn cùng có thể chọn 2, 3 suất.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="inputCellNote">Ghi chú (tùy chọn):</label>
+            <input type="text" id="inputCellNote" placeholder="VD: Không lấy cơm, thêm canh, ăn muộn...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-subtle" data-close-modal="modalCellEdit">Đóng</button>
+          <button id="btnSaveCellEdit" class="btn btn-primary">Lưu thay đổi</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 2: Add/Edit Member Modal -->
+    <div id="modalMember" class="modal-overlay">
+      <div class="modal-box modal-sm">
+        <div class="modal-header">
+          <h3 id="memberModalTitle">Thêm thành viên mới</h3>
+          <button class="modal-close" data-close-modal="modalMember">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="inputMemberId">
+          
+          <div class="form-group">
+            <label for="inputMemberName">Họ và tên <span class="required">*</span>:</label>
+            <input type="text" id="inputMemberName" placeholder="VD: Nguyễn Văn An" required>
+          </div>
+
+          <div class="form-group">
+            <label for="inputMemberPhone">Số điện thoại / Zalo:</label>
+            <input type="tel" id="inputMemberPhone" placeholder="VD: 0912345678">
+          </div>
+
+          <div class="form-group">
+            <label for="inputMemberNote">Ghi chú (bộ phận, sở thích):</label>
+            <input type="text" id="inputMemberNote" placeholder="VD: Phòng Kế toán / Ăn chay">
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="inputMemberActive" checked>
+              <span>Đang tham gia ăn cơm trưa</span>
+            </label>
+            <small class="form-hint">Nếu bỏ chọn, thành viên sẽ tạm ẩn khỏi bảng điểm danh hàng ngày.</small>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-subtle" data-close-modal="modalMember">Hủy</button>
+          <button id="btnSaveMember" class="btn btn-primary">Lưu thành viên</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 3: Record Payment Modal (Thu tiền) -->
+    <div id="modalPayment" class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>Ghi Nhận Thu Tiền Cơm</h3>
+          <button class="modal-close" data-close-modal="modalPayment">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="payModalMemberId">
+          
+          <div class="payment-bill-summary">
+            <div class="bill-row">
+              <span>Thành viên:</span>
+              <strong id="payModalMemberName">Nguyễn Văn An</strong>
+            </div>
+            <div class="bill-row">
+              <span>Kỳ tính tiền:</span>
+              <span id="payModalPeriod">Tháng 10/2026</span>
+            </div>
+            <div class="bill-row">
+              <span>Tổng số suất ăn:</span>
+              <span id="payModalMeals">20 suất</span>
+            </div>
+            <div class="bill-row bill-highlight">
+              <span>Tổng tiền cần thanh toán:</span>
+              <span class="amount-primary" id="payModalTotalAmount">600.000đ</span>
+            </div>
+            <div class="bill-row">
+              <span>Đã thanh toán trước đó:</span>
+              <span class="amount-muted" id="payModalPrevPaid">0đ</span>
+            </div>
+            <div class="bill-row bill-due">
+              <span>Còn nợ hiện tại:</span>
+              <span class="amount-danger" id="payModalRemainingDebt">600.000đ</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="inputPayAmount">Số tiền thực nộp hôm nay (VNĐ):</label>
+            <div class="input-with-addon">
+              <input type="number" id="inputPayAmount" step="1000" min="0">
+              <span class="addon">đ</span>
+            </div>
+            <div class="quick-amount-buttons">
+              <button type="button" class="btn-chip" id="btnPayFullDue">Nộp đủ toàn bộ</button>
+              <button type="button" class="btn-chip" id="btnPayClear">Đặt về 0đ</button>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="selectPayMethod">Hình thức:</label>
+              <select id="selectPayMethod" class="form-select">
+                <option value="bank">Chuyển khoản (CK)</option>
+                <option value="cash">Tiền mặt</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="inputPayDate">Ngày nộp:</label>
+              <input type="date" id="inputPayDate" class="form-input">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="inputPayNote">Ghi chú nộp tiền:</label>
+            <input type="text" id="inputPayNote" placeholder="VD: Đã ck qua Vietcombank, nộp trước nửa...">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-subtle" data-close-modal="modalPayment">Hủy</button>
+          <button id="btnConfirmPayment" class="btn btn-primary">Xác nhận đã thu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 4: VietQR Modal (Xem & Quét mã QR chuyển khoản) -->
+    <div id="modalVietQR" class="modal-overlay">
+      <div class="modal-box modal-sm text-center">
+        <div class="modal-header">
+          <h3>Mã QR Chuyển Khoản VietQR</h3>
+          <button class="modal-close" data-close-modal="modalVietQR">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="qr-subtitle" id="qrSubtitleText">Quét mã để chuyển khoản tiền cơm</p>
+          
+          <div class="qr-image-container">
+            <img id="qrImageElement" src="" alt="VietQR" class="qr-img">
+            <div id="qrLoadingSpinner" class="qr-spinner">Đang tạo mã QR...</div>
+          </div>
+
+          <div class="qr-details-card">
+            <div class="qr-detail-row">
+              <span>Ngân hàng:</span>
+              <strong id="qrBankLabel">MBBank</strong>
+            </div>
+            <div class="qr-detail-row">
+              <span>Số tài khoản:</span>
+              <strong id="qrAccountLabel">0987654321</strong>
+            </div>
+            <div class="qr-detail-row">
+              <span>Chủ TK:</span>
+              <strong id="qrNameLabel">NGUYEN VAN A</strong>
+            </div>
+            <div class="qr-detail-row">
+              <span>Số tiền:</span>
+              <strong class="text-primary" id="qrAmountLabel">600.000đ</strong>
+            </div>
+            <div class="qr-detail-row">
+              <span>Nội dung CK:</span>
+              <code id="qrMemoLabel">TIEN COM T10 NGUYEN VAN AN</code>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer justify-center">
+          <button class="btn btn-subtle" data-close-modal="modalVietQR">Đóng</button>
+          <button id="btnCopyMemo" class="btn btn-secondary">📋 Copy nội dung CK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 5: Quick Reminder Message Modal (Mẫu tin nhắn nhắc nợ Zalo) -->
+    <div id="modalReminder" class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3>Tin Nhắn Nhắc Tiền Cơm</h3>
+          <button class="modal-close" data-close-modal="modalReminder">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="tip-text">Nội dung đã được tạo sẵn, bạn chỉ cần bấm Copy và gửi qua Zalo / Tin nhắn:</p>
+          
+          <div class="textarea-wrapper">
+            <textarea id="textReminderMessage" rows="7" class="styled-textarea" readonly></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-subtle" data-close-modal="modalReminder">Đóng</button>
+          <button id="btnCopyReminderText" class="btn btn-primary">
+            📋 Sao chép tin nhắn
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+  </div>
+
+  <!-- JavaScript Modules -->
+  <script src="js/storage.js"></script>
+  <script src="js/tracker.js"></script>
+  <script src="js/checkin.js"></script>
+  <script src="js/payment.js"></script>
+  <script src="js/members.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
