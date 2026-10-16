@@ -1,0 +1,13 @@
+.git/
+.wrangler/
+.agent/
+.agents/
+GEMINI.md
+node_modules/
+schema.sql
+wrangler.toml
+worker.js
+.gitignore
+.assetsignore
+.DS_Store
+Thumbs.db

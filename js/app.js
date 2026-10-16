@@ -6,7 +6,7 @@
 const App = {
   activeTab: 'tracker',
 
-  init() {
+  async init() {
     console.log('🍚 Initializing Cơm Trưa Pro...');
 
     // 1. Check if first time run and load theme
@@ -25,10 +25,23 @@ const App = {
     this.bindSettingsEvents();
     this.bindModalEvents();
 
-    // 4. Initial Render
+    // 4. Initial Render (immediate cache render)
     this.refreshSettingsUI();
     Tracker.render();
     Payment.render();
+
+    // 5. Connect to Cloudflare D1 Backend if online
+    try {
+      const isCloud = await Storage.checkCloudConnection(Tracker.getYearMonthStr());
+      if (isCloud) {
+        this.refreshSettingsUI();
+        Tracker.render();
+        Payment.render();
+        if (window.Checkin) Checkin.render();
+      }
+    } catch(err) {
+      console.warn('Offline mode:', err);
+    }
 
     // Check if new install without members, prompt gently or offer sample data
     const members = Storage.getMembers();
@@ -78,6 +91,16 @@ const App = {
     const btnToday = document.getElementById('btnToday');
     const inputPicker = document.getElementById('inputMonthPicker');
 
+    const handlePeriodChange = async (y, m) => {
+      Tracker.setPeriod(y, m);
+      Payment.render();
+      if (Storage.isCloud) {
+        await Storage.checkCloudConnection(`${y}-${String(m).padStart(2, '0')}`);
+        Tracker.render();
+        Payment.render();
+      }
+    };
+
     if (btnPrev) {
       btnPrev.addEventListener('click', () => {
         let m = Tracker.currentMonth - 1;
@@ -86,8 +109,7 @@ const App = {
           m = 12;
           y--;
         }
-        Tracker.setPeriod(y, m);
-        Payment.render();
+        handlePeriodChange(y, m);
       });
     }
 
@@ -99,16 +121,14 @@ const App = {
           m = 1;
           y++;
         }
-        Tracker.setPeriod(y, m);
-        Payment.render();
+        handlePeriodChange(y, m);
       });
     }
 
     if (btnToday) {
       btnToday.addEventListener('click', () => {
         const now = new Date();
-        Tracker.setPeriod(now.getFullYear(), now.getMonth() + 1);
-        Payment.render();
+        handlePeriodChange(now.getFullYear(), now.getMonth() + 1);
       });
     }
 
@@ -116,8 +136,7 @@ const App = {
       inputPicker.addEventListener('change', (e) => {
         if (!e.target.value) return;
         const [y, m] = e.target.value.split('-').map(Number);
-        Tracker.setPeriod(y, m);
-        Payment.render();
+        handlePeriodChange(y, m);
       });
     }
 

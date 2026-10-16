@@ -1,0 +1,13 @@
+name = "theo-doi-an-trua"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "."
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "theo-doi-com-db"
+database_id = "3995d714-7004-40d6-8f23-6df451a4773d"

@@ -1,13 +1,13 @@
 /**
- * storage.js - LocalStorage Data Layer for Lunch Tracker
- * Manages Members, Attendance Records, Payment History, and App Settings.
+ * storage.js - Hybrid LocalStorage & Cloudflare D1 Database Adapter
+ * Seamlessly works offline and syncs in real-time with Cloudflare D1 SQLite!
  */
 
 const STORAGE_KEY = 'LUNCH_TRACKER_PRO_DATA_V1';
 
 const DEFAULT_SETTINGS = {
   mealPrice: 30000,
-  workdays: [1, 2, 3, 4, 5], // Mon to Fri
+  workdays: [1, 2, 3, 4, 5],
   bankInfo: {
     bankCode: 'MB',
     accountNumber: '0987654321',
@@ -17,8 +17,83 @@ const DEFAULT_SETTINGS = {
 };
 
 const Storage = {
+  isCloud: false,
+  cloudChecked: false,
+
   /**
-   * Load entire application data from LocalStorage
+   * Check connection to Cloudflare D1 Backend
+   */
+  async checkCloudConnection(yearMonth) {
+    if (window.location.protocol === 'file:') {
+      this.isCloud = false;
+      this.updateCloudStatusBadge(false);
+      return false;
+    }
+
+    try {
+      const ym = yearMonth || new Date().toISOString().slice(0, 7);
+      const res = await fetch(`/api/bootstrap?month=${ym}`, {
+        headers: { 'Accept': 'application/json' }
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) {
+          this.isCloud = true;
+          this.updateCloudStatusBadge(true);
+          
+          // Merge remote D1 data into LocalStorage cache
+          const local = this.loadData();
+          local.settings = { ...local.settings, ...json.settings };
+          local.members = json.members || [];
+          local.records = { ...local.records, ...(json.records || {}) };
+          local.payments[ym] = json.payments || {};
+
+          this.saveData(local);
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Running in offline LocalStorage mode:', e.message);
+    }
+
+    this.isCloud = false;
+    this.updateCloudStatusBadge(false);
+    return false;
+  },
+
+  updateCloudStatusBadge(isOnline) {
+    let badge = document.getElementById('cloudStatusIndicator');
+    if (!badge) {
+      const headerActions = document.querySelector('.header-actions');
+      if (headerActions) {
+        badge = document.createElement('div');
+        badge.id = 'cloudStatusIndicator';
+        badge.className = 'price-chip';
+        badge.style.cursor = 'default';
+        headerActions.insertBefore(badge, headerActions.firstChild);
+      }
+    }
+
+    if (badge) {
+      if (isOnline) {
+        badge.innerHTML = `<span style="font-size:11px;">☁️ D1 Cloud</span>`;
+        badge.style.background = 'var(--primary-50)';
+        badge.style.borderColor = 'var(--primary-200)';
+        badge.style.color = 'var(--primary-700)';
+        badge.title = 'Đã kết nối cơ sở dữ liệu Cloudflare D1 (SQLite trên mây). Dữ liệu được đồng bộ thời gian thực!';
+      } else {
+        badge.innerHTML = `<span style="font-size:11px;">💾 Local</span>`;
+        badge.style.background = 'var(--bg-surface-subtle)';
+        badge.style.borderColor = 'var(--border-default)';
+        badge.style.color = 'var(--text-muted)';
+        badge.title = 'Đang lưu trữ ngoại tuyến tại trình duyệt máy này (LocalStorage).';
+      }
+    }
+  },
+
+  /**
+   * Load entire application data from cache
    */
   loadData() {
     try {
@@ -28,7 +103,6 @@ const Storage = {
       }
       const data = JSON.parse(raw);
       
-      // Ensure schema completeness
       if (!data.settings) data.settings = { ...DEFAULT_SETTINGS };
       if (!data.members) data.members = [];
       if (!data.records) data.records = {};
@@ -36,33 +110,27 @@ const Storage = {
       
       return data;
     } catch (err) {
-      console.error('Failed to load data from localStorage:', err);
+      console.error('Failed to load data:', err);
       return this.initDefaultData();
     }
   },
 
-  /**
-   * Save entire application data to LocalStorage
-   */
   saveData(data) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       return true;
     } catch (err) {
-      console.error('Failed to save data to localStorage:', err);
+      console.error('Failed to save data:', err);
       return false;
     }
   },
 
-  /**
-   * Initialize default structure if storage is empty
-   */
   initDefaultData() {
     const initialData = {
       settings: { ...DEFAULT_SETTINGS },
       members: [],
-      records: {},  // key: "YYYY-MM-DD" -> { [memberId]: { count: 1, note: '' } }
-      payments: {}  // key: "YYYY-MM" -> { [memberId]: { paid: 0, status: 'unpaid', history: [] } }
+      records: {},
+      payments: {}
     };
     this.saveData(initialData);
     return initialData;
@@ -91,6 +159,15 @@ const Storage = {
     };
     data.members.push(newMember);
     this.saveData(data);
+
+    if (this.isCloud) {
+      fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMember)
+      }).catch(err => console.error('Cloud sync error:', err));
+    }
+
     return newMember;
   },
 
@@ -107,6 +184,15 @@ const Storage = {
         updatedAt: new Date().toISOString()
       };
       this.saveData(data);
+
+      if (this.isCloud) {
+        fetch('/api/members', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data.members[idx])
+        }).catch(err => console.error('Cloud sync error:', err));
+      }
+
       return data.members[idx];
     }
     return null;
@@ -116,6 +202,12 @@ const Storage = {
     const data = this.loadData();
     data.members = data.members.filter(m => m.id !== id);
     this.saveData(data);
+
+    if (this.isCloud) {
+      fetch(`/api/members/${id}`, { method: 'DELETE' })
+        .catch(err => console.error('Cloud sync error:', err));
+    }
+
     return true;
   },
 
@@ -125,36 +217,58 @@ const Storage = {
     return data.records[dateStr] || {};
   },
 
-  /**
-   * Set record for a specific member on a specific date
-   * @param {string} dateStr "YYYY-MM-DD"
-   * @param {string} memberId
-   * @param {object|null} recordObj { count: number, note: string } or null to remove
-   */
   setRecord(dateStr, memberId, recordObj) {
     const data = this.loadData();
     if (!data.records[dateStr]) {
       data.records[dateStr] = {};
     }
 
-    if (!recordObj || recordObj.count <= 0) {
+    const count = recordObj ? Number(recordObj.count) || 0 : 0;
+    const note = recordObj ? (recordObj.note || '').trim() : '';
+
+    if (count <= 0) {
       delete data.records[dateStr][memberId];
       if (Object.keys(data.records[dateStr]).length === 0) {
         delete data.records[dateStr];
       }
     } else {
-      data.records[dateStr][memberId] = {
-        count: Number(recordObj.count) || 1,
-        note: (recordObj.note || '').trim()
-      };
+      data.records[dateStr][memberId] = { count, note };
     }
 
     this.saveData(data);
+
+    if (this.isCloud) {
+      fetch('/api/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: dateStr, memberId, count, note })
+      }).catch(err => console.error('Cloud sync error:', err));
+    }
   },
 
-  /**
-   * Toggle between 0 (not eating) and 1 (eating)
-   */
+  batchSetRecords(updates) {
+    const data = this.loadData();
+    updates.forEach(u => {
+      const { date, memberId, count, note } = u;
+      if (!data.records[date]) data.records[date] = {};
+      if (count <= 0) {
+        delete data.records[date][memberId];
+        if (Object.keys(data.records[date]).length === 0) delete data.records[date];
+      } else {
+        data.records[date][memberId] = { count, note: note || '' };
+      }
+    });
+    this.saveData(data);
+
+    if (this.isCloud && updates.length > 0) {
+      fetch('/api/records/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates })
+      }).catch(err => console.error('Cloud sync error:', err));
+    }
+  },
+
   toggleRecord(dateStr, memberId) {
     const current = this.getDayRecords(dateStr)[memberId];
     if (current && current.count > 0) {
@@ -166,9 +280,6 @@ const Storage = {
     }
   },
 
-  /**
-   * Get all records for a month "YYYY-MM"
-   */
   getMonthRecords(yearMonth) {
     const data = this.loadData();
     const result = {};
@@ -203,22 +314,35 @@ const Storage = {
     const historyItem = {
       id: 'pay_' + Date.now(),
       amount: numericAmount,
-      method: method, // 'bank' | 'cash'
+      method: method,
       note: note.trim(),
       date: date || new Date().toISOString().slice(0, 10),
       createdAt: new Date().toISOString()
     };
 
-    const newPaid = numericAmount; // Direct assignment of updated total paid
-    const updatedHistory = [...(current.history || []), historyItem];
-
     data.payments[yearMonth][memberId] = {
-      paid: newPaid,
-      history: updatedHistory,
+      paid: numericAmount,
+      history: [...(current.history || []), historyItem],
       lastUpdated: new Date().toISOString()
     };
 
     this.saveData(data);
+
+    if (this.isCloud) {
+      fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          yearMonth,
+          memberId,
+          amount: numericAmount,
+          method,
+          note,
+          date
+        })
+      }).catch(err => console.error('Cloud sync error:', err));
+    }
+
     return data.payments[yearMonth][memberId];
   },
 
@@ -232,14 +356,31 @@ const Storage = {
     const data = this.loadData();
     data.settings = { ...data.settings, ...newSettings };
     this.saveData(data);
+
+    if (this.isCloud) {
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSettings)
+      }).catch(err => console.error('Cloud sync error:', err));
+    }
+
     return data.settings;
   },
 
   /* ================= SAMPLE DATA SEEDER ================= */
-  seedSampleData() {
+  async seedSampleData() {
+    if (this.isCloud) {
+      try {
+        await fetch('/api/seed', { method: 'POST' });
+        await this.checkCloudConnection();
+        return this.loadData();
+      } catch(e) {
+        console.error(e);
+      }
+    }
+
     const data = this.loadData();
-    
-    // Sample members
     data.members = [
       { id: 'm1', name: 'Nguyễn Văn An', phone: '0901234567', note: 'Phòng Kỹ Thuật', active: true },
       { id: 'm2', name: 'Trần Thị Bình', phone: '0912345678', note: 'Phòng Kế Toán', active: true },
@@ -249,7 +390,6 @@ const Storage = {
       { id: 'm6', name: 'Đặng Quốc Huy', phone: '0933221100', note: 'Phòng Thiết Kế', active: true }
     ];
 
-    // Seed attendance for current month
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -260,15 +400,12 @@ const Storage = {
     for (let day = 1; day <= Math.min(currentDay, daysInMonth); day++) {
       const dateObj = new Date(year, now.getMonth(), day);
       const dayOfWeek = dateObj.getDay();
-      
-      // Skip weekends (Saturday: 6, Sunday: 0)
       if (dayOfWeek === 0 || dayOfWeek === 6) continue;
 
       const dateStr = `${year}-${month}-${String(day).padStart(2, '0')}`;
       data.records[dateStr] = {};
 
       data.members.forEach((m, idx) => {
-        // High probability of eating (85%)
         const eats = (day + idx) % 7 !== 0;
         if (eats) {
           const isExtra = (day === 5 || day === 15) && idx === 0;
@@ -280,7 +417,6 @@ const Storage = {
       });
     }
 
-    // Seed some payments
     const yearMonth = `${year}-${month}`;
     data.payments[yearMonth] = {
       m1: { paid: 300000, history: [{ amount: 300000, method: 'bank', date: `${year}-${month}-10` }] },
@@ -292,7 +428,14 @@ const Storage = {
   },
 
   /* ================= RESET ================= */
-  clearAll() {
+  async clearAll() {
+    if (this.isCloud) {
+      try {
+        await fetch('/api/reset', { method: 'POST' });
+      } catch(e) {
+        console.error(e);
+      }
+    }
     localStorage.removeItem(STORAGE_KEY);
     return this.initDefaultData();
   }

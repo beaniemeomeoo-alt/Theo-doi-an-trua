@@ -13,6 +13,10 @@ desktop.ini
 *.swp
 *.swo
 
+# Cloudflare & Node
+.wrangler/
+node_modules/
+
 # Temporary files
 *.tmp
 *.bak
