@@ -1292,6 +1292,46 @@ body.theme-dark .checkin-card.card-eating {
   resize: vertical;
 }
 
+/* Payment History in Modal */
+.pay-history-container {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-subtle);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pay-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  transition: all var(--transition-fast);
+}
+
+.pay-history-item:hover {
+  border-color: var(--border-strong);
+}
+
+.pay-history-amount {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--primary-700);
+}
+
+.pay-history-meta {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
 /* Responsive Styles */
 @media (max-width: 768px) {
   .header-container {

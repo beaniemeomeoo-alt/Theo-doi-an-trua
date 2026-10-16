@@ -656,9 +656,22 @@
             <label for="inputPayNote">Ghi chú nộp tiền:</label>
             <input type="text" id="inputPayNote" placeholder="VD: Đã ck qua Vietcombank, nộp trước nửa...">
           </div>
+
+          <!-- Lịch sử các lần nộp tiền & Xóa khoản thu -->
+          <div class="form-group" id="groupPaymentHistory" style="border-top: 1px solid var(--border-default); padding-top: 12px; margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-weight: 700; font-size: 13px;">Lịch sử đã nộp trong tháng:</label>
+              <button type="button" id="btnResetMonthPaymentInModal" class="btn btn-sm btn-danger" style="padding: 3px 8px; font-size: 11px;" title="Hủy và xóa toàn bộ các khoản thu đã nhập của người này trong tháng">
+                🗑️ Xóa toàn bộ khoản thu
+              </button>
+            </div>
+            <div id="paymentHistoryListContainer" class="pay-history-container">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-subtle" data-close-modal="modalPayment">Hủy</button>
+          <button class="btn btn-subtle" data-close-modal="modalPayment">Đóng</button>
           <button id="btnConfirmPayment" class="btn btn-primary">Xác nhận đã thu</button>
         </div>
       </div>

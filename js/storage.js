@@ -311,6 +311,18 @@ const Storage = {
     const current = data.payments[yearMonth][memberId] || { paid: 0, history: [] };
     const numericAmount = Math.max(0, Number(amount) || 0);
 
+    let existingHistory = Array.isArray(current.history) ? [...current.history] : [];
+    if (existingHistory.length === 0 && current.paid > 0) {
+      existingHistory = [{
+        id: 'pay_legacy_' + Date.now(),
+        amount: Number(current.paid) || 0,
+        method: 'bank',
+        note: 'Đã nộp trước đó',
+        date: `${yearMonth}-01`,
+        createdAt: new Date().toISOString()
+      }];
+    }
+
     const historyItem = {
       id: 'pay_' + Date.now(),
       amount: numericAmount,
@@ -320,9 +332,12 @@ const Storage = {
       createdAt: new Date().toISOString()
     };
 
+    const updatedHistory = [...existingHistory, historyItem];
+    const newPaid = updatedHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+
     data.payments[yearMonth][memberId] = {
-      paid: numericAmount,
-      history: [...(current.history || []), historyItem],
+      paid: newPaid,
+      history: updatedHistory,
       lastUpdated: new Date().toISOString()
     };
 
@@ -344,6 +359,43 @@ const Storage = {
     }
 
     return data.payments[yearMonth][memberId];
+  },
+
+  deletePayment(yearMonth, memberId) {
+    const data = this.loadData();
+    if (data.payments[yearMonth] && data.payments[yearMonth][memberId]) {
+      data.payments[yearMonth][memberId] = { paid: 0, history: [], lastUpdated: new Date().toISOString() };
+      this.saveData(data);
+    }
+
+    if (this.isCloud) {
+      fetch(`/api/payments/${yearMonth}/${memberId}`, { method: 'DELETE' })
+        .catch(err => console.error('Cloud delete payment error:', err));
+    }
+
+    return true;
+  },
+
+  deletePaymentHistoryItem(yearMonth, memberId, historyId) {
+    const data = this.loadData();
+    if (data.payments[yearMonth] && data.payments[yearMonth][memberId]) {
+      const current = data.payments[yearMonth][memberId];
+      const updatedHistory = (current.history || []).filter(h => h.id !== historyId);
+      const newPaid = updatedHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+      data.payments[yearMonth][memberId] = {
+        paid: newPaid,
+        history: updatedHistory,
+        lastUpdated: new Date().toISOString()
+      };
+      this.saveData(data);
+    }
+
+    if (this.isCloud) {
+      fetch(`/api/payments/${yearMonth}/${memberId}/${historyId}`, { method: 'DELETE' })
+        .catch(err => console.error('Cloud delete history error:', err));
+    }
+
+    return true;
   },
 
   /* ================= SETTINGS ================= */

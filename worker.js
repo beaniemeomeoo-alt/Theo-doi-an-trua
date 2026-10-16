@@ -230,12 +230,22 @@ async function handleApi(request, env, url) {
     const paidAmount = Math.max(0, Number(amount) || 0);
 
     // Get existing history
-    const existing = await db.prepare('SELECT history_json FROM payments WHERE year_month = ? AND member_id = ?')
+    const existing = await db.prepare('SELECT paid, history_json FROM payments WHERE year_month = ? AND member_id = ?')
       .bind(yearMonth, memberId).first();
 
     let history = [];
     if (existing && existing.history_json) {
       try { history = JSON.parse(existing.history_json); } catch(e){}
+    }
+    if ((!history || history.length === 0) && existing && existing.paid > 0) {
+      history = [{
+        id: 'pay_legacy_' + Date.now(),
+        amount: Number(existing.paid) || 0,
+        method: 'bank',
+        note: 'Đã nộp trước đó',
+        date: `${yearMonth}-01`,
+        createdAt: new Date().toISOString()
+      }];
     }
 
     history.push({
@@ -247,6 +257,8 @@ async function handleApi(request, env, url) {
       createdAt: new Date().toISOString()
     });
 
+    const newTotalPaid = history.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+
     await db.prepare(`
       INSERT INTO payments (year_month, member_id, paid, history_json, updated_at)
       VALUES (?, ?, ?, ?, datetime('now', '+7 hours'))
@@ -254,9 +266,46 @@ async function handleApi(request, env, url) {
         paid = excluded.paid,
         history_json = excluded.history_json,
         updated_at = excluded.updated_at
-    `).bind(yearMonth, memberId, paidAmount, JSON.stringify(history)).run();
+    `).bind(yearMonth, memberId, newTotalPaid, JSON.stringify(history)).run();
 
-    return jsonResponse({ success: true, paid: paidAmount, history });
+    return jsonResponse({ success: true, paid: newTotalPaid, history });
+  }
+
+  // DELETE /api/payments/:yearMonth/:memberId (or /:historyId)
+  if (path.startsWith('/api/payments/') && method === 'DELETE') {
+    const parts = path.split('/');
+    const yearMonth = parts[3];
+    const memberId = parts[4];
+    const historyId = parts[5];
+
+    if (!yearMonth || !memberId) {
+      return errorResponse('Missing yearMonth or memberId');
+    }
+
+    if (historyId) {
+      const existing = await db.prepare('SELECT history_json FROM payments WHERE year_month = ? AND member_id = ?')
+        .bind(yearMonth, memberId).first();
+
+      let history = [];
+      if (existing && existing.history_json) {
+        try { history = JSON.parse(existing.history_json); } catch(e){}
+      }
+
+      history = history.filter(h => h.id !== historyId);
+      const newPaid = history.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+
+      await db.prepare(`
+        UPDATE payments SET paid = ?, history_json = ?, updated_at = datetime('now', '+7 hours')
+        WHERE year_month = ? AND member_id = ?
+      `).bind(newPaid, JSON.stringify(history), yearMonth, memberId).run();
+
+      return jsonResponse({ success: true, paid: newPaid, history });
+    } else {
+      await db.prepare('DELETE FROM payments WHERE year_month = ? AND member_id = ?')
+        .bind(yearMonth, memberId).run();
+
+      return jsonResponse({ success: true, paid: 0, history: [] });
+    }
   }
 
   // 5. SETTINGS

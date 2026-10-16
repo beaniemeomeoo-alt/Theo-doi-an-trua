@@ -35,7 +35,7 @@ const Payment = {
       btnPayFull.addEventListener('click', () => {
         const debt = this.activeMemberForPay?.debt || 0;
         const total = this.activeMemberForPay?.totalAmount || 0;
-        document.getElementById('inputPayAmount').value = total;
+        document.getElementById('inputPayAmount').value = debt > 0 ? debt : total;
       });
     }
 
@@ -43,6 +43,16 @@ const Payment = {
     if (btnPayClear) {
       btnPayClear.addEventListener('click', () => {
         document.getElementById('inputPayAmount').value = 0;
+      });
+    }
+
+    // Reset all month payments in modal
+    const btnResetMonth = document.getElementById('btnResetMonthPaymentInModal');
+    if (btnResetMonth) {
+      btnResetMonth.addEventListener('click', () => {
+        if (this.activeMemberForPay) {
+          this.confirmDeletePayment(this.activeMemberForPay.memberId);
+        }
       });
     }
 
@@ -193,6 +203,11 @@ const Payment = {
               <button class="btn btn-sm btn-primary" onclick="Payment.openPaymentModal('${item.member.id}')" title="Cập nhật số tiền đã thu">
                 💳 Thu tiền
               </button>
+              ${item.paidAmount > 0 ? `
+                <button class="btn btn-sm btn-subtle" onclick="Payment.confirmDeletePayment('${item.member.id}')" title="Xóa toàn bộ khoản thu tháng này của ${item.member.name}" style="color: var(--danger);">
+                  🗑️ Xóa thu
+                </button>
+              ` : ''}
               ${item.debt > 0 ? `
                 <button class="btn btn-sm btn-subtle" onclick="Payment.openVietQRModal('${item.member.id}')" title="Tạo mã QR chuyển khoản">
                   🏦 QR
@@ -247,10 +262,17 @@ const Payment = {
     document.getElementById('payModalPrevPaid').textContent = `${paidAmount.toLocaleString('vi-VN')}đ`;
     document.getElementById('payModalRemainingDebt').textContent = `${debt.toLocaleString('vi-VN')}đ`;
 
-    // Default input value is current total paid (or full totalAmount if they want to pay all)
-    document.getElementById('inputPayAmount').value = totalAmount;
+    // Default input value is remaining debt (or full totalAmount if not paid yet, 0 if paid in full)
+    document.getElementById('inputPayAmount').value = debt > 0 ? debt : (totalAmount > 0 && paidAmount === 0 ? totalAmount : 0);
     document.getElementById('inputPayDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('inputPayNote').value = '';
+
+    // Render payment history list and toggle reset button
+    const btnReset = document.getElementById('btnResetMonthPaymentInModal');
+    if (btnReset) {
+      btnReset.style.display = paidAmount > 0 ? 'inline-flex' : 'none';
+    }
+    this.renderPaymentHistoryInModal(paymentInfo.history || [], memberId, yearMonth);
 
     App.openModal('modalPayment');
   },
@@ -384,6 +406,91 @@ const Payment = {
 
     document.getElementById('textReminderMessage').value = msg;
     App.openModal('modalReminder');
+  },
+
+  renderPaymentHistoryInModal(history, memberId, yearMonth) {
+    const container = document.getElementById('paymentHistoryListContainer');
+    if (!container) return;
+
+    if (!history || history.length === 0) {
+      container.innerHTML = `
+        <div style="font-size: 12.5px; color: var(--text-muted); font-style: italic; padding: 10px; text-align: center;">
+          Chưa có khoản thu nào được ghi nhận trong tháng này.
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+    // Show newest transactions first
+    history.slice().reverse().forEach(h => {
+      const methodLabel = h.method === 'cash' ? '💵 Tiền mặt' : '🏦 Chuyển khoản';
+      const dateStr = h.date || (h.createdAt ? h.createdAt.slice(0, 10) : '');
+      const formattedAmount = (Number(h.amount) || 0).toLocaleString('vi-VN');
+      const noteHtml = h.note ? `<div style="font-size: 11.5px; color: var(--text-muted); margin-top: 2px;">💬 ${this.escapeHtml(h.note)}</div>` : '';
+
+      html += `
+        <div class="pay-history-item">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="pay-history-amount">+${formattedAmount}đ</span>
+              <span class="badge-status" style="font-size: 11px; padding: 2px 6px; background: var(--bg-surface-subtle); color: var(--text-muted);">${methodLabel}</span>
+              <span class="pay-history-meta">${dateStr}</span>
+            </div>
+            ${noteHtml}
+          </div>
+          <div>
+            <button type="button" class="btn btn-sm btn-subtle" onclick="Payment.deleteHistoryItem('${memberId}', '${h.id}')" title="Xóa khoản thu này" style="color: var(--danger); padding: 4px 8px; font-size: 12px;">
+              🗑️
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+  },
+
+  deleteHistoryItem(memberId, historyId) {
+    const member = Storage.getMemberById(memberId);
+    const memberName = member ? member.name : 'thành viên';
+    if (!confirm(`Bạn có chắc chắn muốn xóa khoản thu này của ${memberName}?`)) {
+      return;
+    }
+
+    const yearMonth = Tracker.getYearMonthStr();
+    Storage.deletePaymentHistoryItem(yearMonth, memberId, historyId);
+    App.showToast(`Đã xóa khoản thu của ${memberName}!`, 'info');
+
+    // Refresh modal if still open
+    this.openPaymentModal(memberId);
+    this.render();
+    if (window.Tracker) Tracker.render();
+  },
+
+  confirmDeletePayment(memberId) {
+    const member = Storage.getMemberById(memberId);
+    const memberName = member ? member.name : 'thành viên';
+    if (!confirm(`Bạn có chắc chắn muốn XÓA TOÀN BỘ số tiền đã nộp trong tháng này của ${memberName}?\nSố tiền đã nộp sẽ quay về 0đ.`)) {
+      return;
+    }
+
+    const yearMonth = Tracker.getYearMonthStr();
+    Storage.deletePayment(yearMonth, memberId);
+    App.showToast(`Đã xóa toàn bộ khoản thu tháng này của ${memberName}!`, 'info');
+
+    App.closeModal('modalPayment');
+    this.render();
+    if (window.Tracker) Tracker.render();
+  },
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   },
 
   removeVietnameseTones(str) {
