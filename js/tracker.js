@@ -251,8 +251,6 @@ const Tracker = {
       let debtCellHtml = '';
       if (missingAmount > 0) {
         debtCellHtml = `<span style="color: var(--danger); font-weight: 700;">${missingAmount.toLocaleString('vi-VN')}đ</span>`;
-      } else if (overpaidAmount > 0) {
-        debtCellHtml = `<span style="color: var(--success); font-weight: 600;" title="Đã đóng đủ, dư ${overpaidAmount.toLocaleString('vi-VN')}đ">0đ <small style="font-size: 10.5px; opacity: 0.85;">(dư ${overpaidAmount.toLocaleString('vi-VN')}đ)</small></span>`;
       } else {
         debtCellHtml = `<span style="color: var(--text-dim); font-weight: 500;">0đ</span>`;
       }
