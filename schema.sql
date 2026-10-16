@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS meal_records (
   member_id TEXT NOT NULL,          -- References members(id)
   count INTEGER DEFAULT 1,          -- Number of meals: 1, 2, ...
   note TEXT DEFAULT '',             -- Optional note: "Có khách", "Thêm cơm"...
+  price INTEGER DEFAULT NULL,       -- Custom price for this meal if overridden
   updated_at TEXT DEFAULT (datetime('now', '+7 hours')),
   PRIMARY KEY (date, member_id)
 );
@@ -45,9 +46,6 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Initial default settings if not exists
 INSERT OR IGNORE INTO settings (key, value) VALUES
-  ('mealPrice', '30000'),
-  ('bankCode', 'MB'),
-  ('accountNumber', '0987654321'),
-  ('accountName', 'NGUYEN VAN A'),
+  ('mealPrice', '40000'),
   ('workdays', '[1,2,3,4,5]'),
   ('theme', 'light');
