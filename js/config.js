@@ -15,6 +15,17 @@ const AppConfig = {
 
 if (typeof window !== 'undefined') {
   window.AppConfig = AppConfig;
+
+  // Hàm làm sạch dữ liệu văn bản chống tấn công XSS
+  window.escapeHtml = function(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
 }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = AppConfig;

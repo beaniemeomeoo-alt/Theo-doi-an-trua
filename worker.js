@@ -167,18 +167,22 @@ async function handleApi(request, env, url) {
   // GET /api/members
   if (path === '/api/members' && method === 'GET') {
     const res = await db.prepare('SELECT * FROM members ORDER BY name ASC').all();
-    return jsonResponse({ success: true, members: res.results || [] });
+    return jsonResponse({ success: true, members: res.results || [] }, 200, request);
   }
 
   // POST /api/members (Create or Update)
   if (path === '/api/members' && method === 'POST') {
     const body = await request.json();
-    const id = body.id || 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
-    const name = (body.name || '').trim();
-    if (!name) return errorResponse('Tên thành viên không được để trống');
+    let id = body.id ? String(body.id).trim().slice(0, 50) : ('m_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5));
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+      return errorResponse('ID thành viên không hợp lệ', 400, request);
+    }
 
-    const phone = (body.phone || '').trim();
-    const note = (body.note || '').trim();
+    const name = (body.name || '').trim().slice(0, 100);
+    if (!name) return errorResponse('Tên thành viên không được để trống', 400, request);
+
+    const phone = (body.phone || '').trim().slice(0, 30);
+    const note = (body.note || '').trim().slice(0, 255);
     const active = body.active === false ? 0 : 1;
 
     await db.prepare(`
@@ -192,13 +196,15 @@ async function handleApi(request, env, url) {
         updated_at = excluded.updated_at
     `).bind(id, name, phone, note, active).run();
 
-    return jsonResponse({ success: true, member: { id, name, phone, note, active: active === 1 } });
+    return jsonResponse({ success: true, member: { id, name, phone, note, active: active === 1 } }, 200, request);
   }
 
   // DELETE /api/members/:id
   if (path.startsWith('/api/members/') && method === 'DELETE') {
     const id = path.split('/')[3];
-    if (!id) return errorResponse('Missing member ID');
+    if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+      return errorResponse('ID thành viên không hợp lệ', 400, request);
+    }
 
     await db.batch([
       db.prepare('DELETE FROM members WHERE id = ?').bind(id),
@@ -206,7 +212,7 @@ async function handleApi(request, env, url) {
       db.prepare('DELETE FROM payments WHERE member_id = ?').bind(id)
     ]);
 
-    return jsonResponse({ success: true, deletedId: id });
+    return jsonResponse({ success: true, deletedId: id }, 200, request);
   }
 
   // 3. RECORDS CRUD
@@ -214,10 +220,19 @@ async function handleApi(request, env, url) {
   if (path === '/api/records' && method === 'POST') {
     const body = await request.json();
     const { date, memberId, count, note, price } = body;
-    if (!date || !memberId) return errorResponse('Missing date or memberId');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return errorResponse('Định dạng ngày không hợp lệ (YYYY-MM-DD)', 400, request);
+    }
+    if (!memberId || !/^[a-zA-Z0-9_-]+$/.test(memberId)) {
+      return errorResponse('ID thành viên không hợp lệ', 400, request);
+    }
 
-    const numCount = Number(count) || 0;
-    const numPrice = (price !== undefined && price !== null && price !== '') ? Number(price) : null;
+    const numCount = Math.max(0, Math.min(50, Math.floor(Number(count) || 0)));
+    const cleanNote = (note || '').trim().slice(0, 255);
+    const numPrice = (price !== undefined && price !== null && price !== '')
+      ? Math.max(0, Math.min(5000000, Math.floor(Number(price) || 0)))
+      : null;
+
     if (numCount <= 0) {
       await db.prepare('DELETE FROM meal_records WHERE date = ? AND member_id = ?').bind(date, memberId).run();
     } else {
@@ -229,27 +244,38 @@ async function handleApi(request, env, url) {
           note = excluded.note,
           price = excluded.price,
           updated_at = excluded.updated_at
-      `).bind(date, memberId, numCount, (note || '').trim(), numPrice).run();
+      `).bind(date, memberId, numCount, cleanNote, numPrice).run();
     }
 
-    return jsonResponse({ success: true });
+    return jsonResponse({ success: true }, 200, request);
   }
 
   // POST /api/records/batch (Multiple updates at once - for drag & drop painting)
   if (path === '/api/records/batch' && method === 'POST') {
     const body = await request.json();
-    const updates = body.updates || [];
-    if (!Array.isArray(updates) || updates.length === 0) {
-      return jsonResponse({ success: true, count: 0 });
+    const rawUpdates = body.updates || [];
+    if (!Array.isArray(rawUpdates) || rawUpdates.length === 0) {
+      return jsonResponse({ success: true, count: 0 }, 200, request);
     }
 
-    const statements = updates.map(item => {
-      const numCount = Number(item.count) || 0;
-      const numPrice = (item.price !== undefined && item.price !== null && item.price !== '') ? Number(item.price) : null;
+    // Giới hạn số lượng bản ghi trong 1 lần cập nhật (tối đa 150)
+    const updates = rawUpdates.slice(0, 150);
+    const statements = [];
+
+    for (const item of updates) {
+      if (!item.date || !/^\d{4}-\d{2}-\d{2}$/.test(item.date)) continue;
+      if (!item.memberId || !/^[a-zA-Z0-9_-]+$/.test(item.memberId)) continue;
+
+      const numCount = Math.max(0, Math.min(50, Math.floor(Number(item.count) || 0)));
+      const cleanNote = (item.note || '').trim().slice(0, 255);
+      const numPrice = (item.price !== undefined && item.price !== null && item.price !== '')
+        ? Math.max(0, Math.min(5000000, Math.floor(Number(item.price) || 0)))
+        : null;
+
       if (numCount <= 0) {
-        return db.prepare('DELETE FROM meal_records WHERE date = ? AND member_id = ?').bind(item.date, item.memberId);
+        statements.push(db.prepare('DELETE FROM meal_records WHERE date = ? AND member_id = ?').bind(item.date, item.memberId));
       } else {
-        return db.prepare(`
+        statements.push(db.prepare(`
           INSERT INTO meal_records (date, member_id, count, note, price, updated_at)
           VALUES (?, ?, ?, ?, ?, datetime('now', '+7 hours'))
           ON CONFLICT(date, member_id) DO UPDATE SET
@@ -257,12 +283,14 @@ async function handleApi(request, env, url) {
             note = excluded.note,
             price = excluded.price,
             updated_at = excluded.updated_at
-        `).bind(item.date, item.memberId, numCount, (item.note || '').trim(), numPrice);
+        `).bind(item.date, item.memberId, numCount, cleanNote, numPrice));
       }
-    });
+    }
 
-    await db.batch(statements);
-    return jsonResponse({ success: true, count: updates.length });
+    if (statements.length > 0) {
+      await db.batch(statements);
+    }
+    return jsonResponse({ success: true, count: statements.length }, 200, request);
   }
 
   // 4. PAYMENTS CRUD
@@ -270,9 +298,17 @@ async function handleApi(request, env, url) {
   if (path === '/api/payments' && method === 'POST') {
     const body = await request.json();
     const { yearMonth, memberId, amount, method: payMethod, note, date } = body;
-    if (!yearMonth || !memberId) return errorResponse('Missing yearMonth or memberId');
+    if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth)) {
+      return errorResponse('Định dạng tháng không hợp lệ (YYYY-MM)', 400, request);
+    }
+    if (!memberId || !/^[a-zA-Z0-9_-]+$/.test(memberId)) {
+      return errorResponse('ID thành viên không hợp lệ', 400, request);
+    }
 
-    const paidAmount = Math.max(0, Number(amount) || 0);
+    const paidAmount = Math.max(0, Math.min(50000000, Math.floor(Number(amount) || 0)));
+    const cleanMethod = ['bank', 'cash'].includes(payMethod) ? payMethod : 'bank';
+    const cleanNote = (note || '').trim().slice(0, 255);
+    const cleanDate = (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) ? date : new Date().toISOString().slice(0, 10);
 
     // Get existing history
     const existing = await db.prepare('SELECT paid, history_json FROM payments WHERE year_month = ? AND member_id = ?')
@@ -296,11 +332,16 @@ async function handleApi(request, env, url) {
     history.push({
       id: 'pay_' + Date.now(),
       amount: paidAmount,
-      method: payMethod || 'bank',
-      note: (note || '').trim(),
-      date: date || new Date().toISOString().slice(0, 10),
+      method: cleanMethod,
+      note: cleanNote,
+      date: cleanDate,
       createdAt: new Date().toISOString()
     });
+
+    // Giới hạn lịch sử tối đa 100 giao dịch/tháng/người
+    if (history.length > 100) {
+      history = history.slice(-100);
+    }
 
     const newTotalPaid = history.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
 
@@ -313,7 +354,7 @@ async function handleApi(request, env, url) {
         updated_at = excluded.updated_at
     `).bind(yearMonth, memberId, newTotalPaid, JSON.stringify(history)).run();
 
-    return jsonResponse({ success: true, paid: newTotalPaid, history });
+    return jsonResponse({ success: true, paid: newTotalPaid, history }, 200, request);
   }
 
   // DELETE /api/payments/:yearMonth/:memberId (or /:historyId)
@@ -323,11 +364,15 @@ async function handleApi(request, env, url) {
     const memberId = parts[4];
     const historyId = parts[5];
 
-    if (!yearMonth || !memberId) {
-      return errorResponse('Missing yearMonth or memberId');
+    if (!yearMonth || !/^\d{4}-\d{2}$/.test(yearMonth) || !memberId || !/^[a-zA-Z0-9_-]+$/.test(memberId)) {
+      return errorResponse('Tham số tháng hoặc thành viên không hợp lệ', 400, request);
     }
 
     if (historyId) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(historyId)) {
+        return errorResponse('ID giao dịch không hợp lệ', 400, request);
+      }
+
       const existing = await db.prepare('SELECT history_json FROM payments WHERE year_month = ? AND member_id = ?')
         .bind(yearMonth, memberId).first();
 
@@ -344,12 +389,12 @@ async function handleApi(request, env, url) {
         WHERE year_month = ? AND member_id = ?
       `).bind(newPaid, JSON.stringify(history), yearMonth, memberId).run();
 
-      return jsonResponse({ success: true, paid: newPaid, history });
+      return jsonResponse({ success: true, paid: newPaid, history }, 200, request);
     } else {
       await db.prepare('DELETE FROM payments WHERE year_month = ? AND member_id = ?')
         .bind(yearMonth, memberId).run();
 
-      return jsonResponse({ success: true, paid: 0, history: [] });
+      return jsonResponse({ success: true, paid: 0, history: [] }, 200, request);
     }
   }
 
@@ -360,10 +405,12 @@ async function handleApi(request, env, url) {
     const statements = [];
 
     if (body.mealPrice !== undefined) {
-      statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('mealPrice', ?)").bind(String(body.mealPrice)));
+      const mealPrice = Math.max(1000, Math.min(2000000, Math.floor(Number(body.mealPrice) || 40000)));
+      statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('mealPrice', ?)").bind(String(mealPrice)));
     }
     if (body.theme) {
-      statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme', ?)").bind(body.theme));
+      const safeTheme = body.theme === 'dark' ? 'dark' : 'light';
+      statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme', ?)").bind(safeTheme));
     }
 
     if (statements.length > 0) {

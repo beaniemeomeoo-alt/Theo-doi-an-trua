@@ -151,8 +151,8 @@ const Checkin = {
             <div class="member-avatar-info">
               <div class="member-avatar">${initials.toUpperCase()}</div>
               <div class="member-name-block">
-                <strong>${member.name}</strong>
-                <span class="member-subtext">${member.note || member.phone || 'Thành viên'}</span>
+                <strong>${window.escapeHtml(member.name)}</strong>
+                <span class="member-subtext">${window.escapeHtml(member.note || member.phone || 'Thành viên')}</span>
               </div>
             </div>
 

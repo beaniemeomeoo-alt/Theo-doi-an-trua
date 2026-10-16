@@ -185,10 +185,10 @@ const Tracker = {
       let memberTotalAmount = 0;
 
       let rowHtml = `
-        <tr data-member-id="${member.id}">
+        <tr data-member-id="${window.escapeHtml(member.id)}">
           <td class="col-stt">${index + 1}</td>
-          <td class="col-name" title="${member.name} (${member.note || 'Không có ghi chú'})">
-            <span>${member.name}</span>
+          <td class="col-name" title="${window.escapeHtml(member.name)} (${window.escapeHtml(member.note || 'Không có ghi chú')})">
+            <span>${window.escapeHtml(member.name)}</span>
           </td>
       `;
 
@@ -229,13 +229,13 @@ const Tracker = {
 
         rowHtml += `
           <td class="tracker-cell ${stateClass} ${isWeekend ? 'col-weekend' : ''} ${isToday ? 'col-today' : ''} ${noteClass} ${customPriceClass}" 
-              data-member-id="${member.id}" 
-              data-member-name="${member.name}"
+              data-member-id="${window.escapeHtml(member.id)}" 
+              data-member-name="${window.escapeHtml(member.name)}"
               data-date="${dateStr}" 
               data-count="${count}"
-              data-note="${note.replace(/"/g, '&quot;')}"
+              data-note="${window.escapeHtml(note)}"
               data-price="${customPrice || ''}"
-              title="${member.name} - Ngày ${day}/${month}: ${count > 0 ? count + ' suất' + priceInfo : 'Nghỉ'}${noteTitle}">
+              title="${window.escapeHtml(member.name)} - Ngày ${day}/${month}: ${count > 0 ? count + ' suất' + priceInfo : 'Nghỉ'}${noteTitle ? ' ' + window.escapeHtml(noteTitle) : ''}">
             <div class="cell-inner">${cellContent}</div>
           </td>
         `;

@@ -199,8 +199,8 @@ const Payment = {
         <tr>
           <td style="color: var(--text-muted); font-weight: 600;">${index + 1}</td>
           <td>
-            <strong>${item.member.name}</strong>
-            ${item.member.phone ? `<div style="font-size:11.5px;color:var(--text-muted)">${item.member.phone}</div>` : ''}
+            <strong>${window.escapeHtml(item.member.name)}</strong>
+            ${item.member.phone ? `<div style="font-size:11.5px;color:var(--text-muted)">${window.escapeHtml(item.member.phone)}</div>` : ''}
           </td>
           <td style="text-align: center; font-family: var(--font-mono); font-weight: 700;">
             ${item.meals} suất
@@ -219,19 +219,19 @@ const Payment = {
           </td>
           <td>
             <div class="payment-actions-cell">
-              <button class="btn btn-sm btn-primary" onclick="Payment.openPaymentModal('${item.member.id}')" title="Cập nhật số tiền đã thu">
+              <button class="btn btn-sm btn-primary" onclick="Payment.openPaymentModal('${window.escapeHtml(item.member.id)}')" title="Cập nhật số tiền đã thu">
                 💳 Thu tiền
               </button>
               ${item.paidAmount > 0 ? `
-                <button class="btn btn-sm btn-subtle" onclick="Payment.openDeletePaymentModal('${item.member.id}')" title="Xem danh sách và chọn khoản thu muốn xóa" style="color: var(--danger);">
+                <button class="btn btn-sm btn-subtle" onclick="Payment.openDeletePaymentModal('${window.escapeHtml(item.member.id)}')" title="Xem danh sách và chọn khoản thu muốn xóa" style="color: var(--danger);">
                   🗑️ Xóa thu
                 </button>
               ` : ''}
               ${item.debt > 0 ? `
-                <button class="btn btn-sm btn-subtle" onclick="Payment.openVietQRModal('${item.member.id}')" title="Tạo mã QR chuyển khoản">
+                <button class="btn btn-sm btn-subtle" onclick="Payment.openVietQRModal('${window.escapeHtml(item.member.id)}')" title="Tạo mã QR chuyển khoản">
                   🏦 QR
                 </button>
-                <button class="btn btn-sm btn-subtle" onclick="Payment.openReminderModal('${item.member.id}')" title="Mẫu tin nhắn nhắc chuyển tiền">
+                <button class="btn btn-sm btn-subtle" onclick="Payment.openReminderModal('${window.escapeHtml(item.member.id)}')" title="Mẫu tin nhắn nhắc chuyển tiền">
                   💬 Nhắc
                 </button>
               ` : ''}

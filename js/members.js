@@ -157,8 +157,8 @@ const Members = {
                 ${initials.toUpperCase()}
               </div>
               <div class="member-name-block">
-                <strong>${member.name}</strong>
-                <span class="member-subtext">${member.phone || 'Chưa có SĐT'}</span>
+                <strong>${window.escapeHtml(member.name)}</strong>
+                <span class="member-subtext">${window.escapeHtml(member.phone || 'Chưa có SĐT')}</span>
               </div>
             </div>
             
@@ -169,18 +169,18 @@ const Members = {
 
           ${member.note ? `
             <div style="font-size: 12.5px; color: var(--text-muted); background: var(--bg-surface-subtle); padding: 8px 12px; border-radius: var(--radius-sm);">
-              💬 ${member.note}
+              💬 ${window.escapeHtml(member.note)}
             </div>
           ` : ''}
 
           <div class="member-admin-actions">
-            <button class="btn btn-sm btn-subtle" onclick="Members.openEditModal('${member.id}')" title="Sửa thông tin">
+            <button class="btn btn-sm btn-subtle" onclick="Members.openEditModal('${window.escapeHtml(member.id)}')" title="Sửa thông tin">
               ✏️ Sửa
             </button>
-            <button class="btn btn-sm btn-subtle" onclick="Members.toggleActive('${member.id}')" title="${member.active ? 'Tạm dừng ăn cơm' : 'Kích hoạt lại'}">
+            <button class="btn btn-sm btn-subtle" onclick="Members.toggleActive('${window.escapeHtml(member.id)}')" title="${member.active ? 'Tạm dừng ăn cơm' : 'Kích hoạt lại'}">
               ${member.active ? '⏸️ Tạm nghỉ' : '▶️ Bật lại'}
             </button>
-            <button class="btn btn-sm btn-danger" onclick="Members.deleteMember('${member.id}')" title="Xóa người này" style="margin-left: auto;">
+            <button class="btn btn-sm btn-danger" onclick="Members.deleteMember('${window.escapeHtml(member.id)}')" title="Xóa người này" style="margin-left: auto;">
               🗑️ Xóa
             </button>
           </div>
