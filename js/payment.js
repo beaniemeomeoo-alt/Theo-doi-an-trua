@@ -303,6 +303,14 @@ const Payment = {
     if (window.Tracker) Tracker.render();
   },
 
+  getTransferMemo() {
+    const today = new Date();
+    const d = String(today.getDate()).padStart(2, '0');
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const y = today.getFullYear();
+    return `tien com den ngay ${d}/${m}/${y}`;
+  },
+
   openVietQRModal(memberId) {
     const member = Storage.getMemberById(memberId);
     if (!member) return;
@@ -323,9 +331,7 @@ const Payment = {
       return;
     }
 
-    // Remove accents from member name for transfer memo
-    const cleanName = this.removeVietnameseTones(member.name).toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim();
-    const memo = `TIEN COM T${Tracker.currentMonth} ${cleanName}`.substring(0, 25);
+    const memo = this.getTransferMemo();
 
     document.getElementById('qrSubtitleText').textContent = `Chuyển khoản tiền cơm cho ${member.name}`;
     document.getElementById('qrBankLabel').textContent = bankCode;
@@ -366,8 +372,7 @@ const Payment = {
 
     const settings = Storage.getSettings();
     const bankInfo = settings.bankInfo || {};
-    const cleanName = this.removeVietnameseTones(member.name).toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim();
-    const memo = `TIEN COM T${Tracker.currentMonth} ${cleanName}`.substring(0, 25);
+    const memo = this.getTransferMemo();
 
     let msg = `Chào bạn ${member.name} thân mến! 🍚\n`;
     msg += `Tổng kết tiền cơm trưa Tháng ${Tracker.currentMonth}/${Tracker.currentYear} của bạn:\n`;
