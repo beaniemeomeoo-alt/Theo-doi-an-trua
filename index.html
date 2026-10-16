@@ -390,52 +390,6 @@
               </div>
             </div>
 
-            <!-- VietQR Bank Account Settings -->
-            <div class="settings-card">
-              <div class="settings-card-header">
-                <span class="settings-icon">🏦</span>
-                <div>
-                  <h3>Tài Khoản Nhận Tiền (VietQR)</h3>
-                  <p class="subtitle">Cấu hình để tự động sinh mã QR chuyển khoản khi thu tiền</p>
-                </div>
-              </div>
-              <div class="settings-form-body">
-                <div class="form-grid-2">
-                  <div class="form-group">
-                    <label for="inputBankName">Ngân hàng:</label>
-                    <select id="selectBankCode" class="form-select">
-                      <option value="MB">MBBank (Quân Đội)</option>
-                      <option value="VCB">Vietcombank</option>
-                      <option value="TCB">Techcombank</option>
-                      <option value="VPB">VPBank</option>
-                      <option value="ACB">ACB</option>
-                      <option value="BIDV">BIDV</option>
-                      <option value="VIB">VIB</option>
-                      <option value="TPB">TPBank</option>
-                      <option value="MSB">MSB</option>
-                      <option value="OCB">OCB</option>
-                      <option value="HDB">HDBank</option>
-                      <option value="SHB">SHB</option>
-                      <option value="VBA">Agribank</option>
-                      <option value="CAKE">CAKE by VPBank</option>
-                      <option value="TIMO">Timo</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label for="inputAccountNumber">Số tài khoản:</label>
-                    <input type="text" id="inputAccountNumber" placeholder="VD: 0987654321">
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label for="inputAccountName">Tên chủ tài khoản (không dấu):</label>
-                  <input type="text" id="inputAccountName" placeholder="VD: NGUYEN VAN A">
-                </div>
-
-                <button id="btnSaveBankSetting" class="btn btn-primary btn-sm">Lưu thông tin ngân hàng</button>
-              </div>
-            </div>
-
 
           </div>
         </section>
@@ -773,6 +727,7 @@
   </div>
 
   <!-- JavaScript Modules -->
+  <script src="js/config.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/tracker.js"></script>
   <script src="js/checkin.js"></script>

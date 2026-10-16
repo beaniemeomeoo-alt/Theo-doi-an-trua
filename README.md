@@ -30,8 +30,8 @@
 - Tính năng **Tạm nghỉ / Bật lại**: Giúp tạm ẩn người đi công tác hoặc nghỉ phép dài hạn khỏi bảng điểm danh mà không làm mất lịch sử cũ.
 
 ### 5. ⚙️ Cài Đặt & Dữ Liệu
-- Tùy chỉnh đơn giá cơm (mặc định 30.000đ hoặc 40.000đ/suất).
-- Cấu hình tài khoản ngân hàng nhận tiền chuyển khoản (Ngân hàng, Số TK, Tên chủ TK).
+- Tùy chỉnh đơn giá cơm (mặc định 40.000đ/suất).
+- **Bảo mật tài khoản ngân hàng (VietQR)**: Thông tin tài khoản nhận tiền được khóa cố định và quản lý riêng trong file `js/config.js` trực tiếp trên GitHub để bảo mật tuyệt đối, ngăn chặn hoàn toàn việc sửa đổi trái phép từ giao diện web.
 - **Xuất file Excel / CSV**: Hỗ trợ chuẩn font UTF-8 có BOM (mở trực tiếp bằng Microsoft Excel không bị lỗi font Tiếng Việt).
 - Hỗ trợ đổi giao diện **Sáng (Light Mode)** và **Tối (Dark Mode)**.
 

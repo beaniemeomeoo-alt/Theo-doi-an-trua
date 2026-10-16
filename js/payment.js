@@ -308,7 +308,7 @@ const Payment = {
     const d = String(today.getDate()).padStart(2, '0');
     const m = String(today.getMonth() + 1).padStart(2, '0');
     const y = today.getFullYear();
-    return `tien com den ngay ${d}/${m}/${y}`;
+    return `tien com den ngay ${d}-${m}-${y}`;
   },
 
   openVietQRModal(memberId) {
@@ -319,15 +319,13 @@ const Payment = {
     const billing = this.getMemberMonthBilling(memberId, yearMonth);
     const { debt } = billing;
 
-    const settings = Storage.getSettings();
-    const bankInfo = settings.bankInfo || {};
+    const bankInfo = (window.AppConfig && window.AppConfig.bankInfo) || Storage.getSettings().bankInfo || {};
     const bankCode = bankInfo.bankCode || 'MB';
     const accNum = bankInfo.accountNumber || '';
     const accName = bankInfo.accountName || '';
 
     if (!accNum) {
-      App.showToast('Vui lòng vào tab Cài Đặt để nhập Số tài khoản ngân hàng trước!', 'error');
-      App.switchTab('settings');
+      App.showToast('Chưa cấu hình Số tài khoản nhận tiền trong file js/config.js!', 'error');
       return;
     }
 

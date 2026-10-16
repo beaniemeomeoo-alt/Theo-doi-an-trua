@@ -10,8 +10,8 @@ const DEFAULT_SETTINGS = {
   workdays: [1, 2, 3, 4, 5],
   bankInfo: {
     bankCode: 'MB',
-    accountNumber: '0987654321',
-    accountName: 'NGUYEN VAN A'
+    accountNumber: '7700113959999',
+    accountName: 'TRUONG THI BICH PHUONG'
   },
   theme: 'light'
 };
@@ -415,19 +415,30 @@ const Storage = {
   /* ================= SETTINGS ================= */
   getSettings() {
     const data = this.loadData();
-    return data.settings || { ...DEFAULT_SETTINGS };
+    const settings = data.settings || { ...DEFAULT_SETTINGS };
+    if (window.AppConfig && window.AppConfig.bankInfo) {
+      settings.bankInfo = { ...window.AppConfig.bankInfo };
+    }
+    return settings;
   },
 
   updateSettings(newSettings) {
     const data = this.loadData();
-    data.settings = { ...data.settings, ...newSettings };
+    // Khóa không cho phép sửa đổi thông tin ngân hàng qua client/giao diện
+    const safeSettings = { ...newSettings };
+    delete safeSettings.bankInfo;
+
+    data.settings = { ...data.settings, ...safeSettings };
+    if (window.AppConfig && window.AppConfig.bankInfo) {
+      data.settings.bankInfo = { ...window.AppConfig.bankInfo };
+    }
     this.saveData(data);
 
     if (this.isCloud) {
       fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings)
+        body: JSON.stringify(safeSettings)
       }).catch(err => console.error('Cloud sync error:', err));
     }
 

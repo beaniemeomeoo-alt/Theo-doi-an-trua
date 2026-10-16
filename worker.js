@@ -76,15 +76,12 @@ async function handleApi(request, env, url) {
     // Parse settings
     const settings = {
       mealPrice: 30000,
-      bankInfo: { bankCode: 'MB', accountNumber: '0987654321', accountName: 'NGUYEN VAN A' },
+      bankInfo: { bankCode: 'MB', accountNumber: '7700113959999', accountName: 'TRUONG THI BICH PHUONG' },
       workdays: [1, 2, 3, 4, 5],
       theme: 'light'
     };
     (settingsRes.results || []).forEach(row => {
       if (row.key === 'mealPrice') settings.mealPrice = Number(row.value) || 30000;
-      else if (row.key === 'bankCode') settings.bankInfo.bankCode = row.value;
-      else if (row.key === 'accountNumber') settings.bankInfo.accountNumber = row.value;
-      else if (row.key === 'accountName') settings.bankInfo.accountName = row.value;
       else if (row.key === 'workdays') {
         try { settings.workdays = JSON.parse(row.value); } catch(e){}
       }
@@ -321,11 +318,6 @@ async function handleApi(request, env, url) {
 
     if (body.mealPrice !== undefined) {
       statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('mealPrice', ?)").bind(String(body.mealPrice)));
-    }
-    if (body.bankInfo) {
-      if (body.bankInfo.bankCode) statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('bankCode', ?)").bind(body.bankInfo.bankCode));
-      if (body.bankInfo.accountNumber) statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('accountNumber', ?)").bind(body.bankInfo.accountNumber));
-      if (body.bankInfo.accountName) statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('accountName', ?)").bind(body.bankInfo.accountName));
     }
     if (body.theme) {
       statements.push(db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('theme', ?)").bind(body.theme));

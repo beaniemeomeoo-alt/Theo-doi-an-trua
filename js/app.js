@@ -181,14 +181,6 @@ const App = {
     const inputPrice = document.getElementById('inputSettingPrice');
     if (inputPrice) inputPrice.value = price;
 
-    const bankInfo = settings.bankInfo || {};
-    const selectBank = document.getElementById('selectBankCode');
-    const inputAcc = document.getElementById('inputAccountNumber');
-    const inputName = document.getElementById('inputAccountName');
-
-    if (selectBank && bankInfo.bankCode) selectBank.value = bankInfo.bankCode;
-    if (inputAcc && bankInfo.accountNumber) inputAcc.value = bankInfo.accountNumber;
-    if (inputName && bankInfo.accountName) inputName.value = bankInfo.accountName;
   },
 
   bindSettingsEvents() {
@@ -204,21 +196,6 @@ const App = {
         Checkin.render();
         Payment.render();
         this.showToast('Đã lưu giá cơm thành công!', 'success');
-      });
-    }
-
-    // Save Bank Info
-    const btnSaveBank = document.getElementById('btnSaveBankSetting');
-    if (btnSaveBank) {
-      btnSaveBank.addEventListener('click', () => {
-        const bankCode = document.getElementById('selectBankCode').value;
-        const accountNumber = document.getElementById('inputAccountNumber').value.trim();
-        const accountName = document.getElementById('inputAccountName').value.trim().toUpperCase();
-
-        Storage.updateSettings({
-          bankInfo: { bankCode, accountNumber, accountName }
-        });
-        this.showToast('Đã lưu thông tin tài khoản nhận tiền!', 'success');
       });
     }
 
