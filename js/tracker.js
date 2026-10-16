@@ -143,6 +143,8 @@ const Tracker = {
     headerHtml += `
       <th class="col-summary col-sum-meals" title="Tổng số suất ăn trong tháng">Tổng</th>
       <th class="col-summary col-sum-amount" title="Thành tiền = Tổng suất x Đơn giá">Thành tiền</th>
+      <th class="col-summary col-sum-paid" title="Số tiền thành viên đã nộp trong tháng">Đã đóng</th>
+      <th class="col-summary col-sum-debt" title="Số tiền còn thiếu">Còn thiếu</th>
       <th class="col-summary col-sum-action">Thu</th>
     `;
     headerRow.innerHTML = headerHtml;
@@ -154,7 +156,7 @@ const Tracker = {
     if (filteredMembers.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="${visibleDays.length + 5}" style="padding: 40px; text-align: center; color: var(--text-muted);">
+          <td colspan="${visibleDays.length + 7}" style="padding: 40px; text-align: center; color: var(--text-muted);">
             <div style="font-size: 32px; margin-bottom: 8px;">👥</div>
             <div>Chưa có thành viên nào phù hợp bộ lọc.</div>
             <button class="btn btn-primary btn-sm" style="margin-top: 12px;" onclick="document.getElementById('btnOpenNewMember').click()">
@@ -244,6 +246,10 @@ const Tracker = {
       rowHtml += `
           <td class="col-summary col-sum-meals">${memberTotalMeals}</td>
           <td class="col-summary col-sum-amount">${memberTotalAmount.toLocaleString('vi-VN')}đ</td>
+          <td class="col-summary col-sum-paid" style="color: var(--success);">${paidAmount.toLocaleString('vi-VN')}đ</td>
+          <td class="col-summary col-sum-debt" style="color: ${debtAmount > 0 ? 'var(--danger)' : 'var(--text-dim)'};">
+            ${debtAmount.toLocaleString('vi-VN')}đ
+          </td>
           <td class="col-summary col-sum-action">
             <button class="btn-icon btn-sm btn-quick-pay" data-member-id="${member.id}" title="Ghi nhận thu tiền">
               💳
@@ -271,10 +277,13 @@ const Tracker = {
       });
 
       const grandTotalAmount = grandTotalMeals * unitPrice;
+      const grandTotalDebt = Math.max(0, grandTotalAmount - grandTotalPaid);
 
       tfootHtml += `
-        <td class="col-summary col-sum-meals" style="font-size: 14px;">${grandTotalMeals}</td>
-        <td class="col-summary col-sum-amount" style="font-size: 14px; color: var(--primary-700);">${grandTotalAmount.toLocaleString('vi-VN')}đ</td>
+        <td class="col-summary col-sum-meals" style="font-size: 13.5px;">${grandTotalMeals}</td>
+        <td class="col-summary col-sum-amount" style="font-size: 13.5px; color: var(--primary-700);">${grandTotalAmount.toLocaleString('vi-VN')}đ</td>
+        <td class="col-summary col-sum-paid" style="font-size: 13.5px; color: var(--success);">${grandTotalPaid.toLocaleString('vi-VN')}đ</td>
+        <td class="col-summary col-sum-debt" style="font-size: 13.5px; color: ${grandTotalDebt > 0 ? 'var(--danger)' : 'var(--text-dim)'};">${grandTotalDebt.toLocaleString('vi-VN')}đ</td>
         <td class="col-summary col-sum-action"></td>
       `;
 

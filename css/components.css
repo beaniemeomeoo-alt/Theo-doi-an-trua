@@ -168,9 +168,9 @@
   left: 0;
   z-index: 10;
   background: var(--bg-surface);
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
+  width: 38px;
+  min-width: 38px;
+  max-width: 38px;
   border-right: 1px solid var(--border-default);
   font-weight: 600;
   color: var(--text-muted);
@@ -180,14 +180,14 @@
 .tracker-table th.col-name,
 .tracker-table td.col-name {
   position: sticky;
-  left: 44px;
+  left: 38px;
   z-index: 10;
   background: var(--bg-surface);
-  width: 190px;
-  min-width: 190px;
-  max-width: 220px;
+  width: 140px;
+  min-width: 140px;
+  max-width: 160px;
   text-align: left;
-  padding: 10px 14px;
+  padding: 8px 10px;
   font-weight: 700;
   color: var(--text-main);
   border-right: 2px solid var(--border-default);
@@ -205,20 +205,20 @@
 
 /* Day Columns Header */
 .day-header-cell {
-  width: 38px;
-  min-width: 38px;
-  padding: 6px 2px;
+  width: 33px;
+  min-width: 33px;
+  padding: 5px 1px;
 }
 
 .day-header-cell .day-num {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 800;
   font-family: var(--font-mono);
   display: block;
 }
 
 .day-header-cell .day-weekday {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-muted);
   display: block;
@@ -247,10 +247,9 @@
   color: var(--primary-700);
 }
 
-/* Sticky Summary Columns on the Right */
+/* Summary Columns on the Right */
 .tracker-table th.col-summary,
 .tracker-table td.col-summary {
-  position: sticky;
   background: var(--bg-surface-subtle);
   font-family: var(--font-mono);
   font-weight: 700;
@@ -259,44 +258,48 @@
 
 .tracker-table th.col-sum-meals,
 .tracker-table td.col-sum-meals {
-  right: 165px;
-  width: 70px;
-  min-width: 70px;
-  max-width: 70px;
-  z-index: 10;
+  width: 55px;
+  min-width: 55px;
   color: var(--primary-700);
   border-left: 2px solid var(--border-default);
-  box-shadow: -3px 0 6px rgba(0, 0, 0, 0.04);
+  text-align: center;
 }
 
 .tracker-table th.col-sum-amount,
 .tracker-table td.col-sum-amount {
-  right: 50px;
-  width: 115px;
-  min-width: 115px;
-  max-width: 115px;
-  z-index: 10;
+  width: 105px;
+  min-width: 105px;
   text-align: right;
-  padding-right: 10px;
+  padding-right: 8px;
   color: var(--text-main);
+  border-left: 1px solid var(--border-light);
+}
+
+.tracker-table th.col-sum-paid,
+.tracker-table td.col-sum-paid {
+  width: 105px;
+  min-width: 105px;
+  text-align: right;
+  padding-right: 8px;
+  color: var(--success);
+  border-left: 1px solid var(--border-light);
+}
+
+.tracker-table th.col-sum-debt,
+.tracker-table td.col-sum-debt {
+  width: 105px;
+  min-width: 105px;
+  text-align: right;
+  padding-right: 8px;
   border-left: 1px solid var(--border-light);
 }
 
 .tracker-table th.col-sum-action,
 .tracker-table td.col-sum-action {
-  right: 0;
-  width: 50px;
-  min-width: 50px;
-  max-width: 50px;
-  z-index: 10;
+  width: 44px;
+  min-width: 44px;
   text-align: center;
   border-left: 1px solid var(--border-light);
-}
-
-.tracker-table thead th.col-sum-meals,
-.tracker-table thead th.col-sum-amount,
-.tracker-table thead th.col-sum-action {
-  z-index: 30;
 }
 
 /* Interactive Cell Styles */
@@ -401,29 +404,31 @@ body.is-drag-painting .tracker-cell {
 }
 
 .tracker-table tfoot td.col-sum-meals {
-  position: sticky;
-  right: 165px;
-  bottom: 0;
-  z-index: 35;
-  background: var(--bg-surface-subtle);
+  text-align: center;
+  border-left: 2px solid var(--border-default);
 }
 
 .tracker-table tfoot td.col-sum-amount {
-  position: sticky;
-  right: 50px;
-  bottom: 0;
-  z-index: 35;
-  background: var(--bg-surface-subtle);
   text-align: right;
-  padding-right: 10px;
+  padding-right: 8px;
+  border-left: 1px solid var(--border-light);
+}
+
+.tracker-table tfoot td.col-sum-paid {
+  text-align: right;
+  padding-right: 8px;
+  border-left: 1px solid var(--border-light);
+}
+
+.tracker-table tfoot td.col-sum-debt {
+  text-align: right;
+  padding-right: 8px;
+  border-left: 1px solid var(--border-light);
 }
 
 .tracker-table tfoot td.col-sum-action {
-  position: sticky;
-  right: 0;
-  bottom: 0;
-  z-index: 35;
-  background: var(--bg-surface-subtle);
+  text-align: center;
+  border-left: 1px solid var(--border-light);
 }
 
 .table-tip {
