@@ -198,30 +198,6 @@ const App = {
         this.showToast('Đã lưu giá cơm thành công!', 'success');
       });
     }
-
-    // Sample Data Seeder
-    const btnSample = document.getElementById('btnLoadSampleData');
-    if (btnSample) {
-      btnSample.addEventListener('click', () => {
-        if (confirm('Nạp dữ liệu mẫu gồm 6 người và lịch sử ăn tháng này? Dữ liệu hiện tại sẽ được cập nhật.')) {
-          Storage.seedSampleData();
-          this.showToast('Đã nạp dữ liệu mẫu thành công!', 'success');
-          setTimeout(() => location.reload(), 600);
-        }
-      });
-    }
-
-    // Reset Data
-    const btnReset = document.getElementById('btnResetAllData');
-    if (btnReset) {
-      btnReset.addEventListener('click', () => {
-        if (confirm('CẢNH BÁO: Thao tác này sẽ xóa sạch toàn bộ danh sách thành viên và lịch sử ăn cơm! Bạn có chắc không?')) {
-          Storage.clearAll();
-          this.showToast('Đã xóa toàn bộ dữ liệu!', 'info');
-          setTimeout(() => location.reload(), 600);
-        }
-      });
-    }
   },
 
   /* ================= MODAL MANAGER ================= */

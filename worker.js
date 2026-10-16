@@ -2,24 +2,38 @@
  * worker.js - Cloudflare Worker + D1 SQLite Backend for Theo Doi Com Trua
  */
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Content-Type': 'application/json; charset=utf-8'
-};
+const ALLOWED_ORIGINS = [
+  'https://theo-doi-an-trua.beaniemeomeoo.workers.dev',
+  'http://localhost:8787',
+  'http://127.0.0.1:8787'
+];
 
-function jsonResponse(data, status = 200) {
+function getCorsHeaders(request) {
+  const origin = request ? request.headers.get('Origin') : '';
+  const isAllowed = !origin || ALLOWED_ORIGINS.includes(origin) || (origin && origin.endsWith('.workers.dev'));
+
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? (origin || 'https://theo-doi-an-trua.beaniemeomeoo.workers.dev') : 'null',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Content-Type': 'application/json; charset=utf-8'
+  };
+}
+
+function jsonResponse(data, status = 200, request = null) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: CORS_HEADERS
+    headers: getCorsHeaders(request)
   });
 }
 
-function errorResponse(message, status = 400) {
+function errorResponse(message, status = 400, request = null) {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: CORS_HEADERS
+    headers: getCorsHeaders(request)
   });
 }
 
@@ -27,24 +41,53 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Handle Preflight OPTIONS
+    // 1. Handle Preflight OPTIONS
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: getCorsHeaders(request) });
     }
 
-    // Serve API routes
+    // 2. Serve API routes
     if (url.pathname.startsWith('/api/')) {
+      // Chặn các request thay đổi dữ liệu từ các domain lạ (Chống CSRF)
+      const origin = request.headers.get('Origin');
+      if (origin && request.method !== 'GET' && request.method !== 'HEAD') {
+        const isAllowed = ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.workers.dev');
+        if (!isAllowed) {
+          return errorResponse('Forbidden: Yêu cầu cross-origin bị từ chối', 403, request);
+        }
+      }
+
       try {
-        return await handleApi(request, env, url);
+        const res = await handleApi(request, env, url);
+        // Đảm bảo security headers luôn được đính kèm đầy đủ
+        const headers = new Headers(res.headers);
+        const cors = getCorsHeaders(request);
+        for (const [k, v] of Object.entries(cors)) {
+          if (!headers.has(k)) headers.set(k, v);
+        }
+        return new Response(res.body, {
+          status: res.status,
+          statusText: res.statusText,
+          headers
+        });
       } catch (err) {
         console.error('API Error:', err);
-        return errorResponse(err.message || 'Internal Server Error', 500);
+        return errorResponse(err.message || 'Internal Server Error', 500, request);
       }
     }
 
-    // Fallback to static assets (index.html, css, js)
+    // 3. Fallback to static assets với Security Headers
     if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
+      const assetRes = await env.ASSETS.fetch(request);
+      const headers = new Headers(assetRes.headers);
+      headers.set('X-Content-Type-Options', 'nosniff');
+      headers.set('X-Frame-Options', 'DENY');
+      headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+      return new Response(assetRes.body, {
+        status: assetRes.status,
+        statusText: assetRes.statusText,
+        headers
+      });
     }
 
     return new Response('Assets binding not found', { status: 404 });
@@ -327,63 +370,8 @@ async function handleApi(request, env, url) {
       await db.batch(statements);
     }
 
-    return jsonResponse({ success: true });
+    return jsonResponse({ success: true }, 200, request);
   }
 
-  // 6. SEED SAMPLE DATA
-  // POST /api/seed
-  if (path === '/api/seed' && method === 'POST') {
-    const sampleMembers = [
-      { id: 'm1', name: 'Nguyễn Văn An', phone: '0901234567', note: 'Phòng Kỹ Thuật' },
-      { id: 'm2', name: 'Trần Thị Bình', phone: '0912345678', note: 'Phòng Kế Toán' },
-      { id: 'm3', name: 'Lê Hoàng Cường', phone: '0987654321', note: 'Phòng Kinh Doanh' },
-      { id: 'm4', name: 'Phạm Minh Đức', phone: '0978912345', note: 'Phòng Marketing' },
-      { id: 'm5', name: 'Vũ Thu Hà', phone: '0965432198', note: 'Phòng Nhân Sự' },
-      { id: 'm6', name: 'Đặng Quốc Huy', phone: '0933221100', note: 'Phòng Thiết Kế' }
-    ];
-
-    const statements = [];
-    sampleMembers.forEach(m => {
-      statements.push(
-        db.prepare('INSERT OR REPLACE INTO members (id, name, phone, note, active) VALUES (?, ?, ?, ?, 1)')
-          .bind(m.id, m.name, m.phone, m.note)
-      );
-    });
-
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const dayLimit = Math.min(now.getDate(), 20);
-
-    for (let d = 1; d <= dayLimit; d++) {
-      const dateObj = new Date(y, now.getMonth(), d);
-      if (dateObj.getDay() === 0 || dateObj.getDay() === 6) continue;
-      const dateStr = `${y}-${m}-${String(d).padStart(2, '0')}`;
-
-      sampleMembers.forEach((mem, idx) => {
-        if ((d + idx) % 6 !== 0) {
-          statements.push(
-            db.prepare('INSERT OR REPLACE INTO meal_records (date, member_id, count, note) VALUES (?, ?, ?, ?)')
-              .bind(dateStr, mem.id, 1, '')
-          );
-        }
-      });
-    }
-
-    await db.batch(statements);
-    return jsonResponse({ success: true, message: 'Đã nạp dữ liệu mẫu vào Cloudflare D1' });
-  }
-
-  // 7. RESET ALL DATA
-  // POST /api/reset
-  if (path === '/api/reset' && method === 'POST') {
-    await db.batch([
-      db.prepare('DELETE FROM meal_records'),
-      db.prepare('DELETE FROM payments'),
-      db.prepare('DELETE FROM members')
-    ]);
-    return jsonResponse({ success: true, message: 'Đã xóa toàn bộ dữ liệu D1' });
-  }
-
-  return errorResponse('API endpoint not found', 404);
+  return errorResponse('API endpoint not found', 404, request);
 }
