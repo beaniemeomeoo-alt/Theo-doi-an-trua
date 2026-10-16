@@ -172,6 +172,7 @@ const Tracker = {
     let tbodyHtml = '';
     let grandTotalMeals = 0;
     let grandTotalPaid = 0;
+    let grandTotalMissingDebt = 0;
     let unpaidMembersCount = 0;
 
     // Day totals accumulator
@@ -235,20 +236,33 @@ const Tracker = {
       const memberTotalAmount = memberTotalMeals * unitPrice;
       const paymentInfo = monthPayments[member.id] || { paid: 0 };
       const paidAmount = paymentInfo.paid || 0;
-      const debtAmount = memberTotalAmount - paidAmount;
+
+      // Tiền còn đóng thiếu: nếu tổng tiền ăn > tiền đã nộp thì còn thiếu; nếu đã nộp đủ thì = 0đ (không thiếu)
+      const missingAmount = Math.max(0, memberTotalAmount - paidAmount);
+      const overpaidAmount = Math.max(0, paidAmount - memberTotalAmount);
 
       grandTotalMeals += memberTotalMeals;
       grandTotalPaid += paidAmount;
-      if (debtAmount > 0) {
+      if (missingAmount > 0) {
+        grandTotalMissingDebt += missingAmount;
         unpaidMembersCount++;
+      }
+
+      let debtCellHtml = '';
+      if (missingAmount > 0) {
+        debtCellHtml = `<span style="color: var(--danger); font-weight: 700;">${missingAmount.toLocaleString('vi-VN')}đ</span>`;
+      } else if (overpaidAmount > 0) {
+        debtCellHtml = `<span style="color: var(--success); font-weight: 600;" title="Đã đóng đủ, dư ${overpaidAmount.toLocaleString('vi-VN')}đ">0đ <small style="font-size: 10.5px; opacity: 0.85;">(dư ${overpaidAmount.toLocaleString('vi-VN')}đ)</small></span>`;
+      } else {
+        debtCellHtml = `<span style="color: var(--text-dim); font-weight: 500;">0đ</span>`;
       }
 
       rowHtml += `
           <td class="col-summary col-sum-meals">${memberTotalMeals}</td>
           <td class="col-summary col-sum-amount">${memberTotalAmount.toLocaleString('vi-VN')}đ</td>
           <td class="col-summary col-sum-paid" style="color: var(--success);">${paidAmount.toLocaleString('vi-VN')}đ</td>
-          <td class="col-summary col-sum-debt" style="color: ${debtAmount > 0 ? 'var(--danger)' : 'var(--text-dim)'};">
-            ${debtAmount.toLocaleString('vi-VN')}đ
+          <td class="col-summary col-sum-debt">
+            ${debtCellHtml}
           </td>
           <td class="col-summary col-sum-action">
             <button class="btn-icon btn-sm btn-quick-pay" data-member-id="${member.id}" title="Ghi nhận thu tiền">
@@ -277,13 +291,12 @@ const Tracker = {
       });
 
       const grandTotalAmount = grandTotalMeals * unitPrice;
-      const grandTotalDebt = Math.max(0, grandTotalAmount - grandTotalPaid);
 
       tfootHtml += `
         <td class="col-summary col-sum-meals" style="font-size: 13.5px;">${grandTotalMeals}</td>
         <td class="col-summary col-sum-amount" style="font-size: 13.5px; color: var(--primary-700);">${grandTotalAmount.toLocaleString('vi-VN')}đ</td>
         <td class="col-summary col-sum-paid" style="font-size: 13.5px; color: var(--success);">${grandTotalPaid.toLocaleString('vi-VN')}đ</td>
-        <td class="col-summary col-sum-debt" style="font-size: 13.5px; color: ${grandTotalDebt > 0 ? 'var(--danger)' : 'var(--text-dim)'};">${grandTotalDebt.toLocaleString('vi-VN')}đ</td>
+        <td class="col-summary col-sum-debt" style="font-size: 13.5px; color: ${grandTotalMissingDebt > 0 ? 'var(--danger)' : 'var(--text-dim)'};">${grandTotalMissingDebt.toLocaleString('vi-VN')}đ</td>
         <td class="col-summary col-sum-action"></td>
       `;
 
@@ -294,7 +307,7 @@ const Tracker = {
     this.attachCellInteractions();
 
     // 5. Update Metrics Cards
-    this.updateMetrics(grandTotalMeals, grandTotalMeals * unitPrice, grandTotalPaid, unitPrice, filteredMembers.length, unpaidMembersCount);
+    this.updateMetrics(grandTotalMeals, grandTotalMeals * unitPrice, grandTotalPaid, unitPrice, filteredMembers.length, unpaidMembersCount, grandTotalMissingDebt);
   },
 
   attachCellInteractions() {
@@ -489,13 +502,12 @@ const Tracker = {
     }
   },
 
-  updateMetrics(totalMeals, totalAmount, totalPaid, unitPrice, memberCount, unpaidCount = 0) {
+  updateMetrics(totalMeals, totalAmount, totalPaid, unitPrice, memberCount, unpaidCount = 0, totalMissingDebt = 0) {
     document.getElementById('metricTotalMeals').textContent = totalMeals.toLocaleString('vi-VN');
     document.getElementById('metricTotalAmount').textContent = totalAmount.toLocaleString('vi-VN');
     document.getElementById('metricTotalPaid').textContent = totalPaid.toLocaleString('vi-VN');
     
-    const debt = Math.max(0, totalAmount - totalPaid);
-    document.getElementById('metricTotalDebt').textContent = debt.toLocaleString('vi-VN');
+    document.getElementById('metricTotalDebt').textContent = totalMissingDebt.toLocaleString('vi-VN');
 
     const percent = totalAmount > 0 ? Math.min(100, Math.round((totalPaid / totalAmount) * 100)) : 0;
     document.getElementById('metricPaidPercentBar').style.width = `${percent}%`;
