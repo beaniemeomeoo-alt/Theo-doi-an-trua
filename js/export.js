@@ -86,7 +86,17 @@ const Exporter = {
           totalAmt += count * p;
           rowCols.push(`"${count}"`);
         } else {
-          rowCols.push('""');
+          const isAbsent = (window.Tracker && typeof Tracker.isAbsentDate === 'function')
+            ? Tracker.isAbsentDate(dateStr)
+            : (() => {
+                const dateObj = new Date(year, month - 1, d);
+                const dow = dateObj.getDay();
+                const now = new Date();
+                const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                return (dow === 0) || (dateStr < nowStr && dow >= 1 && dow <= 5);
+              })();
+
+          rowCols.push(isAbsent ? '"X"' : '""');
         }
       }
 

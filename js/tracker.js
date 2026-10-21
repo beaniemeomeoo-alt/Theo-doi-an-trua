@@ -71,6 +71,27 @@ const Tracker = {
     return `${this.currentYear}-${String(this.currentMonth).padStart(2, '0')}`;
   },
 
+  /**
+   * Kiểm tra ngày có thuộc diện tự động đánh dấu ✕ (Nghỉ/Không ăn) hay không:
+   * 1. Chủ Nhật: tự động đánh ✕ cho tất cả.
+   * 2. Các ngày làm việc đã qua (Thứ 2 - Thứ 6 trong quá khứ): tự động đánh ✕ nếu chưa tick.
+   * 3. Thứ 7 và các ngày tương lai: không tự động đánh ✕ (để trống ·).
+   */
+  isAbsentDate(dateStr) {
+    if (!dateStr) return false;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const dayOfWeek = dateObj.getDay();
+    const isSunday = (dayOfWeek === 0);
+    const isWorkday = (dayOfWeek >= 1 && dayOfWeek <= 5);
+
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const isPast = (dateStr < todayStr);
+
+    return isSunday || (isPast && isWorkday);
+  },
+
   render() {
     const year = this.currentYear;
     const month = this.currentMonth;
@@ -214,18 +235,30 @@ const Tracker = {
         let cellContent = '·';
         let stateClass = 'cell-none';
 
+        const shouldAutoMarkAbsent = (count === 0) && this.isAbsentDate(dateStr);
+
         if (count === 1) {
           cellContent = '✓';
           stateClass = 'cell-eat';
         } else if (count > 1) {
           cellContent = count;
           stateClass = 'cell-extra';
+        } else if (shouldAutoMarkAbsent) {
+          cellContent = '✕';
+          stateClass = 'cell-absent';
         }
 
         const noteClass = note ? 'cell-has-note' : '';
         const customPriceClass = (customPrice !== null && customPrice > 0 && customPrice !== unitPrice) ? 'cell-has-custom-price' : '';
         const priceInfo = (customPrice !== null && customPrice > 0 && customPrice !== unitPrice) ? ` (${customPrice.toLocaleString('vi-VN')}đ/suất)` : '';
         const noteTitle = note ? ` [${note}]` : '';
+
+        let cellStatusDesc = 'Nghỉ';
+        if (count > 0) {
+          cellStatusDesc = count + ' suất' + priceInfo;
+        } else if (shouldAutoMarkAbsent) {
+          cellStatusDesc = (dayOfWeek === 0) ? 'Chủ Nhật (Nghỉ)' : 'Không ăn';
+        }
 
         rowHtml += `
           <td class="tracker-cell ${stateClass} ${isWeekend ? 'col-weekend' : ''} ${isToday ? 'col-today' : ''} ${noteClass} ${customPriceClass}" 
@@ -235,7 +268,7 @@ const Tracker = {
               data-count="${count}"
               data-note="${window.escapeHtml(note)}"
               data-price="${customPrice || ''}"
-              title="${window.escapeHtml(member.name)} - Ngày ${day}/${month}: ${count > 0 ? count + ' suất' + priceInfo : 'Nghỉ'}${noteTitle ? ' ' + window.escapeHtml(noteTitle) : ''}">
+              title="${window.escapeHtml(member.name)} - Ngày ${day}/${month}: ${cellStatusDesc}${noteTitle ? ' ' + window.escapeHtml(noteTitle) : ''}">
             <div class="cell-inner">${cellContent}</div>
           </td>
         `;
@@ -400,7 +433,7 @@ const Tracker = {
     const targetVal = this.dragTargetValue;
     if (targetVal === 1) {
       Storage.setRecord(dateStr, memberId, { count: 1, note: '' });
-      cell.classList.remove('cell-none', 'cell-extra');
+      cell.classList.remove('cell-none', 'cell-extra', 'cell-absent');
       cell.classList.add('cell-eat');
       cell.setAttribute('data-count', '1');
       const inner = cell.querySelector('.cell-inner');
@@ -408,11 +441,19 @@ const Tracker = {
     } else {
       Storage.setRecord(dateStr, memberId, null);
       cell.classList.remove('cell-eat', 'cell-extra', 'cell-has-note');
-      cell.classList.add('cell-none');
       cell.setAttribute('data-count', '0');
       cell.removeAttribute('data-note');
+
+      const isAbsent = this.isAbsentDate(dateStr);
+      if (isAbsent) {
+        cell.classList.remove('cell-none');
+        cell.classList.add('cell-absent');
+      } else {
+        cell.classList.remove('cell-absent');
+        cell.classList.add('cell-none');
+      }
       const inner = cell.querySelector('.cell-inner');
-      if (inner) inner.textContent = '·';
+      if (inner) inner.textContent = isAbsent ? '✕' : '·';
     }
 
     // Trigger visual pulse animation

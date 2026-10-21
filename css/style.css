@@ -623,6 +623,12 @@ body.theme-dark .nav-tab.active {
   border-color: var(--warning-border);
 }
 
+.legend-badge.legend-absent {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+
 /* ================= Footer ================= */
 .app-footer {
   margin-top: auto;

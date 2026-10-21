@@ -372,6 +372,21 @@ body.is-drag-painting .tracker-cell {
   font-weight: normal;
 }
 
+.cell-absent .cell-inner {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+  font-weight: 700;
+  font-size: 12.5px;
+  line-height: 1;
+  transition: all var(--transition-fast);
+}
+
+.cell-absent:hover .cell-inner {
+  filter: brightness(0.95);
+  transform: scale(1.08);
+}
+
 .cell-has-note::after {
   content: '';
   position: absolute;
