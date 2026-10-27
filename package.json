@@ -5,7 +5,6 @@
   "description": "Hệ thống theo dõi ăn trưa & quản lý thu tiền chạy trên Cloudflare Worker + D1 Database",
   "scripts": {
     "deploy": "wrangler deploy",
-    "db:migrate": "wrangler d1 execute theo-doi-com-db --file=./schema.sql --remote",
     "tail": "wrangler tail"
   },
   "keywords": [

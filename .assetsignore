@@ -2,8 +2,6 @@
 .wrangler/
 node_modules/
 package.json
-README.md
-schema.sql
 wrangler.toml
 worker.js
 .gitignore
