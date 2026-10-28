@@ -93,7 +93,7 @@ const Exporter = {
                 const dow = dateObj.getDay();
                 const now = new Date();
                 const nowStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                return (dow === 0) || (dateStr < nowStr && dow >= 1 && dow <= 5);
+                return (dow === 0) || (dateStr <= nowStr && dow >= 1 && dow <= 5);
               })();
 
           rowCols.push(isAbsent ? '"X"' : '""');

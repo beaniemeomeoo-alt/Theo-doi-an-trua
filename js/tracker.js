@@ -74,7 +74,7 @@ const Tracker = {
   /**
    * Kiểm tra ngày có thuộc diện tự động đánh dấu ✕ (Nghỉ/Không ăn) hay không:
    * 1. Chủ Nhật: tự động đánh ✕ cho tất cả.
-   * 2. Các ngày làm việc đã qua (Thứ 2 - Thứ 6 trong quá khứ): tự động đánh ✕ nếu chưa tick.
+   * 2. Các ngày làm việc từ đầu tháng đến hôm nay (Thứ 2 - Thứ 6): tự động đánh ✕ nếu không ăn.
    * 3. Thứ 7 và các ngày tương lai: không tự động đánh ✕ (để trống ·).
    */
   isAbsentDate(dateStr) {
@@ -87,9 +87,9 @@ const Tracker = {
 
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const isPast = (dateStr < todayStr);
+    const isPastOrToday = (dateStr <= todayStr);
 
-    return isSunday || (isPast && isWorkday);
+    return isSunday || (isPastOrToday && isWorkday);
   },
 
   render() {
