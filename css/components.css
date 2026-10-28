@@ -1364,14 +1364,20 @@ body.theme-dark .checkin-card.card-eating {
     flex-direction: column;
     align-items: stretch;
   }
-  .brand-icon {
+  .brand-icon,
+  .header-container .brand-icon {
     width: 136px;
     height: 92px;
     margin-top: 0;
     margin-bottom: 0;
   }
   .nav-container {
+    padding-top: 0;
     padding-left: 16px;
+    min-height: auto;
+  }
+  .nav-container::before {
+    left: 16px;
   }
   .month-selector-bar {
     justify-content: center;

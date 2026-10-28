@@ -322,20 +322,38 @@ body.theme-dark #btnThemeToggle .theme-icon-dark {
 }
 
 /* App Nav Tabs */
+.header-container .brand-icon {
+  margin-top: 0;
+  margin-bottom: -68px;
+}
+
 .app-nav {
-  border-top: 1px solid var(--border-light);
+  border-top: none;
   background: var(--bg-surface);
 }
 
 .nav-container {
   max-width: 1860px;
   margin: 0 auto;
-  padding: 0 16px 0 234px;
+  padding: 10px 16px 0 234px;
+  min-height: 68px;
   width: 98%;
   display: flex;
+  align-items: flex-end;
   gap: 4px;
   overflow-x: auto;
   scrollbar-width: none;
+  position: relative;
+}
+
+.nav-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 234px;
+  right: 16px;
+  height: 1px;
+  background-color: var(--border-light);
 }
 .nav-container::-webkit-scrollbar {
   display: none;
