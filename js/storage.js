@@ -223,11 +223,12 @@ const Storage = {
       data.records[dateStr] = {};
     }
 
-    const count = recordObj ? Number(recordObj.count) || 0 : 0;
+    const isClear = !recordObj || recordObj.count === null || recordObj.count === undefined || Number(recordObj.count) < 0;
+    const count = isClear ? -1 : Math.max(0, Number(recordObj.count) || 0);
     const note = recordObj ? (recordObj.note || '').trim() : '';
     const price = (recordObj && recordObj.price !== undefined && recordObj.price !== null && recordObj.price !== '') ? Number(recordObj.price) : null;
 
-    if (count <= 0) {
+    if (count < 0) {
       delete data.records[dateStr][memberId];
       if (Object.keys(data.records[dateStr]).length === 0) {
         delete data.records[dateStr];
@@ -244,7 +245,7 @@ const Storage = {
       fetch('/api/records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: dateStr, memberId, count, note, price })
+        body: JSON.stringify({ date: dateStr, memberId, count, note, price, clear: isClear })
       }).catch(err => console.error('Cloud sync error:', err));
     }
   },
@@ -254,7 +255,7 @@ const Storage = {
     updates.forEach(u => {
       const { date, memberId, count, note } = u;
       if (!data.records[date]) data.records[date] = {};
-      if (count <= 0) {
+      if (count < 0) {
         delete data.records[date][memberId];
         if (Object.keys(data.records[date]).length === 0) delete data.records[date];
       } else {
@@ -275,7 +276,7 @@ const Storage = {
   toggleRecord(dateStr, memberId) {
     const current = this.getDayRecords(dateStr)[memberId];
     if (current && current.count > 0) {
-      this.setRecord(dateStr, memberId, null);
+      this.setRecord(dateStr, memberId, { count: 0, note: '' });
       return 0;
     } else {
       this.setRecord(dateStr, memberId, { count: 1, note: '' });

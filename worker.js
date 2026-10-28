@@ -233,7 +233,7 @@ async function handleApi(request, env, url) {
       ? Math.max(0, Math.min(5000000, Math.floor(Number(price) || 0)))
       : null;
 
-    if (numCount <= 0) {
+    if (body.clear === true || count === null || count === undefined || Number(count) < 0) {
       await db.prepare('DELETE FROM meal_records WHERE date = ? AND member_id = ?').bind(date, memberId).run();
     } else {
       await db.prepare(`
@@ -272,7 +272,7 @@ async function handleApi(request, env, url) {
         ? Math.max(0, Math.min(5000000, Math.floor(Number(item.price) || 0)))
         : null;
 
-      if (numCount <= 0) {
+      if (item.clear === true || item.count === null || item.count === undefined || Number(item.count) < 0) {
         statements.push(db.prepare('DELETE FROM meal_records WHERE date = ? AND member_id = ?').bind(item.date, item.memberId));
       } else {
         statements.push(db.prepare(`

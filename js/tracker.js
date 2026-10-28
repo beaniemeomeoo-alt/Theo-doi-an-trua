@@ -74,8 +74,8 @@ const Tracker = {
   /**
    * Kiểm tra ngày có thuộc diện tự động đánh dấu ✕ (Nghỉ/Không ăn) hay không:
    * 1. Chủ Nhật: tự động đánh ✕ cho tất cả.
-   * 2. Các ngày làm việc từ đầu tháng đến hôm nay (Thứ 2 - Thứ 6): tự động đánh ✕ nếu không ăn.
-   * 3. Thứ 7 và các ngày tương lai: không tự động đánh ✕ (để trống ·).
+   * 2. Các ngày làm việc đã qua (Thứ 2 - Thứ 6 trong quá khứ): tự động đánh ✕ nếu chưa tick.
+   * 3. Ngày hôm nay, Thứ 7 và các ngày tương lai: không tự động đánh ✕ (để tự đánh).
    */
   isAbsentDate(dateStr) {
     if (!dateStr) return false;
@@ -87,9 +87,9 @@ const Tracker = {
 
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    const isPastOrToday = (dateStr <= todayStr);
+    const isPast = (dateStr < todayStr);
 
-    return isSunday || (isPastOrToday && isWorkday);
+    return isSunday || (isPast && isWorkday);
   },
 
   render() {
@@ -235,7 +235,8 @@ const Tracker = {
         let cellContent = '·';
         let stateClass = 'cell-none';
 
-        const shouldAutoMarkAbsent = (count === 0) && this.isAbsentDate(dateStr);
+        const hasExplicitNoEat = (record !== undefined && record !== null && Number(record.count) === 0);
+        const shouldAutoMarkAbsent = (count === 0) && (hasExplicitNoEat || this.isAbsentDate(dateStr));
 
         if (count === 1) {
           cellContent = '✓';
@@ -439,21 +440,13 @@ const Tracker = {
       const inner = cell.querySelector('.cell-inner');
       if (inner) inner.textContent = '✓';
     } else {
-      Storage.setRecord(dateStr, memberId, null);
-      cell.classList.remove('cell-eat', 'cell-extra', 'cell-has-note');
+      Storage.setRecord(dateStr, memberId, { count: 0, note: '' });
+      cell.classList.remove('cell-eat', 'cell-extra', 'cell-has-note', 'cell-none');
+      cell.classList.add('cell-absent');
       cell.setAttribute('data-count', '0');
       cell.removeAttribute('data-note');
-
-      const isAbsent = this.isAbsentDate(dateStr);
-      if (isAbsent) {
-        cell.classList.remove('cell-none');
-        cell.classList.add('cell-absent');
-      } else {
-        cell.classList.remove('cell-absent');
-        cell.classList.add('cell-none');
-      }
       const inner = cell.querySelector('.cell-inner');
-      if (inner) inner.textContent = isAbsent ? '✕' : '·';
+      if (inner) inner.textContent = '✕';
     }
 
     // Trigger visual pulse animation
@@ -567,7 +560,7 @@ const Tracker = {
     if (qty > 0) {
       Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: qty, note, price: finalPrice });
     } else {
-      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, null);
+      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: 0, note });
     }
 
     App.closeModal('modalCellEdit');
