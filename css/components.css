@@ -1364,6 +1364,15 @@ body.theme-dark .checkin-card.card-eating {
     flex-direction: column;
     align-items: stretch;
   }
+  .brand-icon {
+    width: 136px;
+    height: 92px;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+  .nav-container {
+    padding-left: 16px;
+  }
   .month-selector-bar {
     justify-content: center;
   }
