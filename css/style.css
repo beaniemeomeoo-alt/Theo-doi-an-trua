@@ -330,7 +330,7 @@ body.theme-dark #btnThemeToggle .theme-icon-dark {
 .nav-container {
   max-width: 1860px;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 16px 0 234px;
   width: 98%;
   display: flex;
   gap: 4px;
