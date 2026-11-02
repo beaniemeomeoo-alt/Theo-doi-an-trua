@@ -10,7 +10,7 @@ const ALLOWED_ORIGINS = [
 
 function getCorsHeaders(request) {
   const origin = request ? request.headers.get('Origin') : '';
-  const isAllowed = !origin || ALLOWED_ORIGINS.includes(origin) || (origin && origin.endsWith('.workers.dev'));
+  const isAllowed = !origin || ALLOWED_ORIGINS.includes(origin);
 
   return {
     'Access-Control-Allow-Origin': isAllowed ? (origin || 'https://theo-doi-an-trua.beaniemeomeoo.workers.dev') : 'null',
@@ -50,8 +50,8 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       // Chặn các request thay đổi dữ liệu từ các domain lạ (Chống CSRF)
       const origin = request.headers.get('Origin');
-      if (origin && request.method !== 'GET' && request.method !== 'HEAD') {
-        const isAllowed = ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.workers.dev');
+      if (request.method !== 'GET' && request.method !== 'HEAD') {
+        const isAllowed = Boolean(origin && ALLOWED_ORIGINS.includes(origin));
         if (!isAllowed) {
           return errorResponse('Forbidden: Yêu cầu cross-origin bị từ chối', 403, request);
         }
