@@ -16,7 +16,83 @@ const DEFAULT_SETTINGS = {
   theme: 'light'
 };
 
+const AUTH_TOKEN_KEY = 'LUNCH_TRACKER_AUTH_TOKEN_V1';
+
 const Storage = {
+  getToken() {
+    try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch (e) { return ''; }
+  },
+
+  setToken(token) {
+    try {
+      if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+      else localStorage.removeItem(AUTH_TOKEN_KEY);
+    } catch (e) {}
+  },
+
+  clearToken() {
+    this.setToken('');
+  },
+
+  isAuthenticated() {
+    const token = this.getToken();
+    if (!token) return false;
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const exp = Number(parts[1]);
+      if (exp && Date.now() > exp) {
+        this.clearToken();
+        return false;
+      }
+    }
+    return true;
+  },
+
+  async login(username, password) {
+    const cleanUser = String(username || '').trim().toLowerCase();
+    const cleanPass = String(password || '');
+
+    if (window.location.protocol !== 'file:') {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ username: cleanUser, password: cleanPass })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success && data.token) {
+          this.setToken(data.token);
+          return { success: true };
+        }
+        return { success: false, error: data.error || 'Sai tài khoản hoặc mật khẩu!' };
+      } catch (err) {
+        // Fallback if local static server without Worker API
+      }
+    }
+
+    if (cleanUser === 'admin' && cleanPass === 'admin') {
+      const exp = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      this.setToken(`admin.${exp}.local`);
+      return { success: true };
+    }
+    return { success: false, error: 'Sai tài khoản hoặc mật khẩu!' };
+  },
+
+  async apiFetch(url, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    const token = this.getToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(url, { ...options, headers });
+    if (res.status === 401) {
+      this.clearToken();
+      if (window.App && typeof window.App.showLoginScreen === 'function') {
+        window.App.showLoginScreen('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+      }
+    }
+    return res;
+  },
   isCloud: false,
   cloudChecked: false,
 
@@ -32,7 +108,7 @@ const Storage = {
 
     try {
       const ym = yearMonth || new Date().toISOString().slice(0, 7);
-      const res = await fetch(`/api/bootstrap?month=${ym}`, {
+      const res = await this.apiFetch(`/api/bootstrap?month=${ym}`, {
         headers: { 'Accept': 'application/json' }
       });
 
@@ -161,7 +237,7 @@ const Storage = {
     this.saveData(data);
 
     if (this.isCloud) {
-      fetch('/api/members', {
+      this.apiFetch('/api/members', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newMember)
@@ -186,7 +262,7 @@ const Storage = {
       this.saveData(data);
 
       if (this.isCloud) {
-        fetch('/api/members', {
+        this.apiFetch('/api/members', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(data.members[idx])
@@ -204,7 +280,7 @@ const Storage = {
     this.saveData(data);
 
     if (this.isCloud) {
-      fetch(`/api/members/${id}`, { method: 'DELETE' })
+      this.apiFetch(`/api/members/${id}`, { method: 'DELETE' })
         .catch(err => console.error('Cloud sync error:', err));
     }
 
@@ -242,7 +318,7 @@ const Storage = {
     this.saveData(data);
 
     if (this.isCloud) {
-      fetch('/api/records', {
+      this.apiFetch('/api/records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: dateStr, memberId, count, note, price, clear: isClear })
@@ -265,7 +341,7 @@ const Storage = {
     this.saveData(data);
 
     if (this.isCloud && updates.length > 0) {
-      fetch('/api/records/batch', {
+      this.apiFetch('/api/records/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates })
@@ -377,7 +453,7 @@ const Storage = {
     this.saveData(data);
 
     if (this.isCloud) {
-      fetch('/api/payments', {
+      this.apiFetch('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -402,7 +478,7 @@ const Storage = {
     }
 
     if (this.isCloud) {
-      fetch(`/api/payments/${yearMonth}/${memberId}`, { method: 'DELETE' })
+      this.apiFetch(`/api/payments/${yearMonth}/${memberId}`, { method: 'DELETE' })
         .catch(err => console.error('Cloud delete payment error:', err));
     }
 
@@ -424,7 +500,7 @@ const Storage = {
     }
 
     if (this.isCloud) {
-      fetch(`/api/payments/${yearMonth}/${memberId}/${historyId}`, { method: 'DELETE' })
+      this.apiFetch(`/api/payments/${yearMonth}/${memberId}/${historyId}`, { method: 'DELETE' })
         .catch(err => console.error('Cloud delete history error:', err));
     }
 
@@ -454,7 +530,7 @@ const Storage = {
     this.saveData(data);
 
     if (this.isCloud) {
-      fetch('/api/settings', {
+      this.apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(safeSettings)

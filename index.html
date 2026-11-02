@@ -16,7 +16,41 @@
   <link rel="stylesheet" href="css/components.css">
 </head>
 <body class="theme-light">
-  <div id="app" class="app-layout">
+  <!-- Login Security Overlay -->
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo">
+          <img src="cat-icon.png" alt="Trưa nay ăn gì" class="login-logo-img">
+        </div>
+        <h2 class="login-title">Trưa nay ăn gì</h2>
+        <p class="login-subtitle">Đăng nhập hệ thống theo dõi suất ăn & thu tiền cơm</p>
+      </div>
+
+      <form id="loginForm" class="login-form" autocomplete="on">
+        <div class="form-group">
+          <label for="loginUsername">Tài khoản</label>
+          <input type="text" id="loginUsername" class="form-control" placeholder="Nhập tài khoản..." autocomplete="username" required>
+        </div>
+
+        <div class="form-group">
+          <label for="loginPassword">Mật khẩu</label>
+          <div class="login-password-wrap">
+            <input type="password" id="loginPassword" class="form-control" placeholder="Nhập mật khẩu..." autocomplete="current-password" required>
+            <button type="button" id="btnToggleLoginPwd" class="btn-toggle-pwd" title="Hiện/Ẩn mật khẩu">👁️</button>
+          </div>
+        </div>
+
+        <div id="loginErrorMsg" class="login-error" style="display: none;"></div>
+
+        <button type="submit" id="btnLoginSubmit" class="btn btn-primary login-submit-btn">
+          🔐 Đăng nhập
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app" class="app-layout" style="display: none;">
     
     <!-- Top Navigation Header -->
     <header class="app-header">
@@ -65,6 +99,10 @@
           <button id="btnOpenNewMember" class="btn btn-primary btn-sm">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             <span>Thêm người</span>
+          </button>
+
+          <button id="btnLogout" class="btn btn-subtle btn-sm" title="Đăng xuất tài khoản">
+            <span>🚪 Đăng xuất</span>
           </button>
         </div>
       </div>

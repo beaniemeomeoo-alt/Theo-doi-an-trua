@@ -94,14 +94,91 @@ export default {
   }
 };
 
+const DEFAULT_ADMIN_USER = 'admin';
+// SHA-256 hex digest of 'admin'
+const DEFAULT_ADMIN_PASS_HASH = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+async function sha256Hex(text) {
+  const data = new TextEncoder().encode(String(text));
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function hmacSign(payload, secret) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getTokenSecret(env) {
+  return (env && env.AUTH_SECRET) || 'trua-nay-an-gi-hmac-secret-3995d714-7004-40d6-8f23';
+}
+
+async function createAuthToken(username, env) {
+  const exp = Date.now() + TOKEN_TTL_MS;
+  const payload = `${username}.${exp}`;
+  const sig = await hmacSign(payload, getTokenSecret(env));
+  return `${payload}.${sig}`;
+}
+
+async function verifyAuthRequest(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) return false;
+  const token = authHeader.slice(7).trim();
+  const parts = token.split('.');
+  if (parts.length !== 3) return false;
+  const [username, expStr, sig] = parts;
+  const exp = Number(expStr);
+  if (!username || !exp || Date.now() > exp) return false;
+  const expectedSig = await hmacSign(`${username}.${expStr}`, getTokenSecret(env));
+  return sig === expectedSig;
+}
+
 async function handleApi(request, env, url) {
   const db = env.DB;
   if (!db) {
-    return errorResponse('D1 Database binding (DB) not configured', 500);
+    return errorResponse('D1 Database binding (DB) not configured', 500, request);
   }
 
   const path = url.pathname;
   const method = request.method;
+
+  // 0. AUTH LOGIN: POST /api/auth/login
+  if (path === '/api/auth/login' && method === 'POST') {
+    const body = await request.json();
+    const username = String(body.username || '').trim().toLowerCase();
+    const password = String(body.password || '');
+
+    const expectedUser = String((env && env.ADMIN_USERNAME) || DEFAULT_ADMIN_USER).trim().toLowerCase();
+    let passOk = false;
+    if (env && env.ADMIN_PASSWORD) {
+      passOk = (password === String(env.ADMIN_PASSWORD));
+    } else {
+      const inputHash = await sha256Hex(password);
+      passOk = (inputHash === DEFAULT_ADMIN_PASS_HASH);
+    }
+
+    if (username !== expectedUser || !passOk) {
+      return errorResponse('Sai tài khoản hoặc mật khẩu!', 401, request);
+    }
+
+    const token = await createAuthToken(username, env);
+    return jsonResponse({ success: true, token, username }, 200, request);
+  }
+
+  // Require valid Bearer token for all other /api/* endpoints
+  const isAuthed = await verifyAuthRequest(request, env);
+  if (!isAuthed) {
+    return errorResponse('Unauthorized: Vui lòng đăng nhập để tiếp tục', 401, request);
+  }
 
   // 1. BOOTSTRAP: Get all data for active month in 1 fast round-trip
   // GET /api/bootstrap?month=YYYY-MM

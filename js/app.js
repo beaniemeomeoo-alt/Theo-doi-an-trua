@@ -5,32 +5,50 @@
 
 const App = {
   activeTab: 'tracker',
+  isBooted: false,
 
   async init() {
-    console.log('🍚 Initializing Cơm Trưa Pro...');
+    console.log('🐱 Initializing Trưa nay ăn gì...');
 
-    // 1. Check if first time run and load theme
+    // 1. Load theme and bind login events
     this.initTheme();
+    this.bindLoginEvents();
 
-    // 2. Initialize sub-modules
-    Tracker.init();
-    Checkin.init();
-    Payment.init();
-    Members.init();
-    Exporter.init();
+    // 2. Require authentication before booting app
+    if (!Storage.isAuthenticated()) {
+      this.showLoginScreen();
+      return;
+    }
 
-    // 3. Bind global events
-    this.bindNavigation();
-    this.bindMonthNavigation();
-    this.bindSettingsEvents();
-    this.bindModalEvents();
+    await this.bootApp();
+  },
 
-    // 4. Initial Render (immediate cache render)
+  async bootApp() {
+    const loginOverlay = document.getElementById('loginOverlay');
+    const appContainer = document.getElementById('app');
+    if (loginOverlay) loginOverlay.style.display = 'none';
+    if (appContainer) appContainer.style.display = 'flex';
+
+    if (!this.isBooted) {
+      this.isBooted = true;
+      Tracker.init();
+      Checkin.init();
+      Payment.init();
+      Members.init();
+      Exporter.init();
+
+      this.bindNavigation();
+      this.bindMonthNavigation();
+      this.bindSettingsEvents();
+      this.bindModalEvents();
+    }
+
+    // Initial Render (immediate cache render)
     this.refreshSettingsUI();
     Tracker.render();
     Payment.render();
 
-    // 5. Connect to Cloudflare D1 Backend if online
+    // Connect to Cloudflare D1 Backend if online
     try {
       const isCloud = await Storage.checkCloudConnection(Tracker.getYearMonthStr());
       if (isCloud) {
@@ -43,12 +61,84 @@ const App = {
       console.warn('Offline mode:', err);
     }
 
-    // Check if new install without members, prompt gently or offer sample data
+    if (!Storage.isAuthenticated()) return;
+
     const members = Storage.getMembers();
     if (members.length === 0) {
       setTimeout(() => {
-        this.showToast('Chào mừng! Hãy thêm thành viên hoặc nạp Dữ liệu mẫu trong Cài đặt để thử ngay.', 'info');
+        this.showToast('Chào mừng! Hãy thêm thành viên để bắt đầu điểm danh cơm trưa.', 'info');
       }, 500);
+    }
+  },
+
+  showLoginScreen(errorText = '') {
+    const loginOverlay = document.getElementById('loginOverlay');
+    const appContainer = document.getElementById('app');
+    const errBox = document.getElementById('loginErrorMsg');
+    if (appContainer) appContainer.style.display = 'none';
+    if (loginOverlay) loginOverlay.style.display = 'flex';
+    if (errBox) {
+      if (errorText) {
+        errBox.textContent = errorText;
+        errBox.style.display = 'block';
+      } else {
+        errBox.style.display = 'none';
+      }
+    }
+    setTimeout(() => document.getElementById('loginUsername')?.focus(), 50);
+  },
+
+  bindLoginEvents() {
+    const form = document.getElementById('loginForm');
+    const userInp = document.getElementById('loginUsername');
+    const passInp = document.getElementById('loginPassword');
+    const errBox = document.getElementById('loginErrorMsg');
+    const submitBtn = document.getElementById('btnLoginSubmit');
+    const togglePwdBtn = document.getElementById('btnToggleLoginPwd');
+    const logoutBtn = document.getElementById('btnLogout');
+
+    if (togglePwdBtn && passInp) {
+      togglePwdBtn.addEventListener('click', () => {
+        const isPwd = passInp.type === 'password';
+        passInp.type = isPwd ? 'text' : 'password';
+        togglePwdBtn.textContent = isPwd ? '🙈' : '👁️';
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (errBox) errBox.style.display = 'none';
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = '⏳ Đang kiểm tra...';
+        }
+
+        const result = await Storage.login(userInp?.value, passInp?.value);
+
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = '🔐 Đăng nhập';
+        }
+
+        if (result.success) {
+          if (passInp) passInp.value = '';
+          await this.bootApp();
+          this.showToast('Đăng nhập thành công!', 'success');
+        } else {
+          if (errBox) {
+            errBox.textContent = result.error || 'Sai tài khoản hoặc mật khẩu!';
+            errBox.style.display = 'block';
+          }
+        }
+      });
+    }
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => {
+        Storage.clearToken();
+        this.showLoginScreen();
+      });
     }
   },
 
