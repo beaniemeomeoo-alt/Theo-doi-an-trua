@@ -252,7 +252,7 @@ const Checkin = {
           note: existing?.note || ''
         });
       } else {
-        Storage.setRecord(this.selectedDate, member.id, null);
+        Storage.setRecord(this.selectedDate, member.id, Storage.getUncheckedRecord(this.selectedDate));
       }
     });
 

@@ -273,10 +273,28 @@ const Storage = {
     }
   },
 
+  /**
+   * Returns true if dateStr (YYYY-MM-DD) is after today (local time).
+   */
+  isFutureDate(dateStr) {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return dateStr > todayStr;
+  },
+
+  /**
+   * Record to store when a cell is unchecked:
+   * - Today / past dates: explicit "not eating" ({ count: 0 }) -> shows ✕
+   * - Future dates: cleared (null) -> shows · (undecided)
+   */
+  getUncheckedRecord(dateStr) {
+    return this.isFutureDate(dateStr) ? null : { count: 0, note: '' };
+  },
+
   toggleRecord(dateStr, memberId) {
     const current = this.getDayRecords(dateStr)[memberId];
     if (current && current.count > 0) {
-      this.setRecord(dateStr, memberId, { count: 0, note: '' });
+      this.setRecord(dateStr, memberId, this.getUncheckedRecord(dateStr));
       return 0;
     } else {
       this.setRecord(dateStr, memberId, { count: 1, note: '' });

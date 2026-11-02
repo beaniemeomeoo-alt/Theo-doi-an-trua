@@ -440,13 +440,16 @@ const Tracker = {
       const inner = cell.querySelector('.cell-inner');
       if (inner) inner.textContent = '✓';
     } else {
-      Storage.setRecord(dateStr, memberId, { count: 0, note: '' });
-      cell.classList.remove('cell-eat', 'cell-extra', 'cell-has-note', 'cell-none');
-      cell.classList.add('cell-absent');
+      const uncheckedRecord = Storage.getUncheckedRecord(dateStr);
+      Storage.setRecord(dateStr, memberId, uncheckedRecord);
+      // Explicit "not eating" (today/past) or auto-absent date (e.g. Sunday) -> ✕, otherwise -> ·
+      const showAbsent = uncheckedRecord !== null || this.isAbsentDate(dateStr);
+      cell.classList.remove('cell-eat', 'cell-extra', 'cell-has-note', 'cell-none', 'cell-absent');
+      cell.classList.add(showAbsent ? 'cell-absent' : 'cell-none');
       cell.setAttribute('data-count', '0');
       cell.removeAttribute('data-note');
       const inner = cell.querySelector('.cell-inner');
-      if (inner) inner.textContent = '✕';
+      if (inner) inner.textContent = showAbsent ? '✕' : '·';
     }
 
     // Trigger visual pulse animation
@@ -497,6 +500,7 @@ const Tracker = {
 
     const radioYes = document.getElementById('radioEatYes');
     const radioNo = document.getElementById('radioEatNo');
+    const radioClear = document.getElementById('radioEatClear');
     const inputQty = document.getElementById('inputCellQuantity');
     const inputNote = document.getElementById('inputCellNote');
     const qtyGroup = document.getElementById('groupMealQuantity');
@@ -525,7 +529,13 @@ const Tracker = {
       qtyGroup.style.display = 'block';
       if (priceGroup) priceGroup.style.display = 'block';
     } else {
-      radioNo.checked = true;
+      // Saved record with count 0 = explicitly "not eating"; no record = undecided
+      const hasExplicitNoEat = (record !== undefined && record !== null && Number(record.count) === 0);
+      if (hasExplicitNoEat || !radioClear) {
+        radioNo.checked = true;
+      } else {
+        radioClear.checked = true;
+      }
       inputQty.value = 1;
       qtyGroup.style.display = 'none';
       if (priceGroup) priceGroup.style.display = 'none';
@@ -542,6 +552,9 @@ const Tracker = {
       qtyGroup.style.display = 'none';
       if (priceGroup) priceGroup.style.display = 'none';
     };
+    if (radioClear) {
+      radioClear.onchange = radioNo.onchange;
+    }
 
     App.openModal('modalCellEdit');
   },
@@ -557,8 +570,12 @@ const Tracker = {
     const enteredPrice = (inputPrice && inputPrice.value) ? Number(inputPrice.value) : null;
     const finalPrice = (enteredPrice !== null && enteredPrice > 0 && enteredPrice !== defaultPrice) ? enteredPrice : null;
 
+    const isClearing = !!document.getElementById('radioEatClear')?.checked;
     if (qty > 0) {
       Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: qty, note, price: finalPrice });
+    } else if (isClearing) {
+      // "Để trống": remove the record entirely (past workdays will still auto-show ✕)
+      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, null);
     } else {
       Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: 0, note });
     }
