@@ -1,7 +1,6 @@
 .git/
 .wrangler/
 node_modules/
-package.json
 wrangler.toml
 worker.js
 .gitignore
