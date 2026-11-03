@@ -254,6 +254,7 @@ const Payment = {
 
     this.activeMemberForPay = {
       memberId,
+      yearMonth,
       memberName: member.name,
       meals,
       totalAmount,
@@ -273,6 +274,14 @@ const Payment = {
     document.getElementById('inputPayAmount').value = debt > 0 ? debt : (totalAmount > 0 && paidAmount === 0 ? totalAmount : 0);
     document.getElementById('inputPayDate').value = new Date().toISOString().slice(0, 10);
     document.getElementById('inputPayNote').value = '';
+    const pending = Storage.getPendingPayment(yearMonth, memberId);
+    if (pending) {
+      document.getElementById('inputPayAmount').value = pending.input.amount;
+      document.getElementById('selectPayMethod').value = pending.input.method;
+      document.getElementById('inputPayDate').value = pending.input.date;
+      document.getElementById('inputPayNote').value = pending.input.note;
+      App.showToast('Khoản thu trước chưa được xác nhận. Bấm Xác nhận để gửi lại cùng khoản thu.', 'info');
+    }
 
     // Render payment history list and toggle reset button
     const btnReset = document.getElementById('btnResetMonthPaymentInModal');
@@ -285,22 +294,24 @@ const Payment = {
   },
 
   savePayment() {
-    if (!this.activeMemberForPay) return;
+    return App.runAction(async () => {
+      if (!this.activeMemberForPay) return;
 
-    const memberId = this.activeMemberForPay.memberId;
-    const yearMonth = Tracker.getYearMonthStr();
-    const amount = Number(document.getElementById('inputPayAmount').value) || 0;
-    const method = document.getElementById('selectPayMethod').value;
-    const date = document.getElementById('inputPayDate').value;
-    const note = document.getElementById('inputPayNote').value;
+      const memberId = this.activeMemberForPay.memberId;
+      const yearMonth = this.activeMemberForPay.yearMonth;
+      const amount = Number(document.getElementById('inputPayAmount').value) || 0;
+      const method = document.getElementById('selectPayMethod').value;
+      const date = document.getElementById('inputPayDate').value;
+      const note = document.getElementById('inputPayNote').value;
 
-    Storage.recordPayment(yearMonth, memberId, amount, method, note, date);
+      await Storage.recordPayment(yearMonth, memberId, amount, method, note, date);
 
-    App.closeModal('modalPayment');
-    App.showToast(`Đã lưu thanh toán cho ${this.activeMemberForPay.memberName}!`, 'success');
+      App.closeModal('modalPayment');
+      App.showToast(`Đã lưu thanh toán cho ${this.activeMemberForPay.memberName}!`, 'success');
 
-    this.render();
-    if (window.Tracker) Tracker.render();
+      this.render();
+      if (window.Tracker) Tracker.render();
+    }, document.getElementById('btnConfirmPayment'));
   },
 
   getTransferMemo() {
@@ -344,7 +355,7 @@ const Payment = {
 
     const qrImg = document.getElementById('qrImageElement');
     const qrSpinner = document.getElementById('qrLoadingSpinner');
-    
+
     qrSpinner.style.display = 'block';
     qrImg.style.display = 'none';
 
@@ -501,66 +512,72 @@ const Payment = {
   },
 
   deleteSinglePaymentItem(memberId, historyId) {
-    const member = Storage.getMemberById(memberId);
-    const memberName = member ? member.name : 'thành viên';
-    const yearMonth = Tracker.getYearMonthStr();
-    const paymentInfo = Storage.getMemberPayment(yearMonth, memberId);
-    const item = (paymentInfo.history || []).find(h => h.id === historyId);
-    const itemAmountStr = item ? (Number(item.amount) || 0).toLocaleString('vi-VN') + 'đ' : '';
+    return App.runAction(async () => {
+      const member = Storage.getMemberById(memberId);
+      const memberName = member ? member.name : 'thành viên';
+      const yearMonth = Tracker.getYearMonthStr();
+      const paymentInfo = Storage.getMemberPayment(yearMonth, memberId);
+      const item = (paymentInfo.history || []).find(h => h.id === historyId);
+      const itemAmountStr = item ? (Number(item.amount) || 0).toLocaleString('vi-VN') + 'đ' : '';
 
-    if (!confirm(`Bạn có chắc chắn muốn xóa khoản thu ${itemAmountStr ? itemAmountStr + ' ' : ''}này của ${memberName}?`)) {
-      return;
-    }
+      if (!confirm(`Bạn có chắc chắn muốn xóa khoản thu ${itemAmountStr ? itemAmountStr + ' ' : ''}này của ${memberName}?`)) {
+        return;
+      }
 
-    Storage.deletePaymentHistoryItem(yearMonth, memberId, historyId);
-    App.showToast(`Đã xóa khoản thu của ${memberName}!`, 'info');
+      await Storage.deletePaymentHistoryItem(yearMonth, memberId, historyId);
+      App.showToast(`Đã xóa khoản thu của ${memberName}!`, 'info');
 
-    // Refresh modal with updated data
-    const updatedPayment = Storage.getMemberPayment(yearMonth, memberId);
-    if (!updatedPayment.paid || updatedPayment.paid <= 0) {
-      App.closeModal('modalDeletePayment');
-    } else {
-      this.openDeletePaymentModal(memberId);
-    }
+      // Refresh modal with updated data
+      const updatedPayment = Storage.getMemberPayment(yearMonth, memberId);
+      if (!updatedPayment.paid || updatedPayment.paid <= 0) {
+        App.closeModal('modalDeletePayment');
+      } else {
+        this.openDeletePaymentModal(memberId);
+      }
 
-    this.render();
-    if (window.Tracker) Tracker.render();
+      this.render();
+      if (window.Tracker) Tracker.render();
+    }, null);
   },
 
   deleteHistoryItem(memberId, historyId) {
-    const member = Storage.getMemberById(memberId);
-    const memberName = member ? member.name : 'thành viên';
-    if (!confirm(`Bạn có chắc chắn muốn xóa khoản thu này của ${memberName}?`)) {
-      return;
-    }
+    return App.runAction(async () => {
+      const member = Storage.getMemberById(memberId);
+      const memberName = member ? member.name : 'thành viên';
+      if (!confirm(`Bạn có chắc chắn muốn xóa khoản thu này của ${memberName}?`)) {
+        return;
+      }
 
-    const yearMonth = Tracker.getYearMonthStr();
-    Storage.deletePaymentHistoryItem(yearMonth, memberId, historyId);
-    App.showToast(`Đã xóa khoản thu của ${memberName}!`, 'info');
+      const yearMonth = Tracker.getYearMonthStr();
+      await Storage.deletePaymentHistoryItem(yearMonth, memberId, historyId);
+      App.showToast(`Đã xóa khoản thu của ${memberName}!`, 'info');
 
-    // Refresh modal if still open
-    this.openPaymentModal(memberId);
-    this.render();
-    if (window.Tracker) Tracker.render();
+      // Refresh modal if still open
+      this.openPaymentModal(memberId);
+      this.render();
+      if (window.Tracker) Tracker.render();
+    }, null);
   },
 
   confirmDeletePayment(memberId, isFromDeleteModal = false) {
-    const member = Storage.getMemberById(memberId);
-    const memberName = member ? member.name : 'thành viên';
-    if (!confirm(`Bạn có chắc chắn muốn XÓA TOÀN BỘ số tiền đã nộp trong tháng này của ${memberName}?\nSố tiền đã nộp sẽ quay về 0đ.`)) {
-      return;
-    }
+    return App.runAction(async () => {
+      const member = Storage.getMemberById(memberId);
+      const memberName = member ? member.name : 'thành viên';
+      if (!confirm(`Bạn có chắc chắn muốn XÓA TOÀN BỘ số tiền đã nộp trong tháng này của ${memberName}?\nSố tiền đã nộp sẽ quay về 0đ.`)) {
+        return;
+      }
 
-    const yearMonth = Tracker.getYearMonthStr();
-    Storage.deletePayment(yearMonth, memberId);
-    App.showToast(`Đã xóa toàn bộ khoản thu tháng này của ${memberName}!`, 'info');
+      const yearMonth = Tracker.getYearMonthStr();
+      await Storage.deletePayment(yearMonth, memberId);
+      App.showToast(`Đã xóa toàn bộ khoản thu tháng này của ${memberName}!`, 'info');
 
-    if (isFromDeleteModal) {
-      App.closeModal('modalDeletePayment');
-    }
-    App.closeModal('modalPayment');
-    this.render();
-    if (window.Tracker) Tracker.render();
+      if (isFromDeleteModal) {
+        App.closeModal('modalDeletePayment');
+      }
+      App.closeModal('modalPayment');
+      this.render();
+      if (window.Tracker) Tracker.render();
+    }, null);
   },
 
   escapeHtml(str) {

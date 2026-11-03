@@ -8,3 +8,8 @@ worker.js
 .assetsignore
 .DS_Store
 Thumbs.db
+
+.dev.vars*
+.env*
+tests/
+README.md

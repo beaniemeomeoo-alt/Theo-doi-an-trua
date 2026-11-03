@@ -53,72 +53,78 @@ const Members = {
     document.getElementById('inputMemberName').value = member.name;
     document.getElementById('inputMemberPhone').value = member.phone || '';
     document.getElementById('inputMemberNote').value = member.note || '';
-    document.getElementById('inputMemberActive').checked = member.active !== false;
+    document.getElementById('inputMemberActive').checked = !!member.active;
 
     App.openModal('modalMember');
   },
 
   saveMember() {
-    const nameInput = document.getElementById('inputMemberName');
-    const name = nameInput.value.trim();
+    return App.runAction(async () => {
+      const nameInput = document.getElementById('inputMemberName');
+      const name = nameInput.value.trim();
 
-    if (!name) {
-      App.showToast('Vui lòng nhập họ và tên thành viên!', 'error');
-      nameInput.focus();
-      return;
-    }
+      if (!name) {
+        App.showToast('Vui lòng nhập họ và tên thành viên!', 'error');
+        nameInput.focus();
+        return;
+      }
 
-    const phone = document.getElementById('inputMemberPhone').value.trim();
-    const note = document.getElementById('inputMemberNote').value.trim();
-    const active = document.getElementById('inputMemberActive').checked;
+      const phone = document.getElementById('inputMemberPhone').value.trim();
+      const note = document.getElementById('inputMemberNote').value.trim();
+      const active = document.getElementById('inputMemberActive').checked;
 
-    if (this.editingMemberId) {
-      // Update
-      Storage.updateMember(this.editingMemberId, { name, phone, note, active });
-      App.showToast(`Đã cập nhật thành viên: ${name}`, 'success');
-    } else {
-      // Create
-      Storage.addMember({ name, phone, note, active });
-      App.showToast(`Đã thêm thành viên mới: ${name}`, 'success');
-    }
+      if (this.editingMemberId) {
+        // Update
+        await Storage.updateMember(this.editingMemberId, { name, phone, note, active });
+        App.showToast(`Đã cập nhật thành viên: ${name}`, 'success');
+      } else {
+        // Create
+        await Storage.addMember({ name, phone, note, active });
+        App.showToast(`Đã thêm thành viên mới: ${name}`, 'success');
+      }
 
-    App.closeModal('modalMember');
+      App.closeModal('modalMember');
 
-    // Refresh all views
-    this.render();
-    if (window.Tracker) Tracker.render();
-    if (window.Checkin) Checkin.render();
-    if (window.Payment) Payment.render();
+      // Refresh all views
+      this.render();
+      if (window.Tracker) Tracker.render();
+      if (window.Checkin) Checkin.render();
+      if (window.Payment) Payment.render();
+    }, document.getElementById('btnSaveMember'));
   },
 
   toggleActive(memberId) {
-    const member = Storage.getMemberById(memberId);
-    if (!member) return;
+    return App.runAction(async () => {
+      const member = Storage.getMemberById(memberId);
+      if (!member) return;
 
-    const newStatus = !member.active;
-    Storage.updateMember(memberId, { active: newStatus });
-    App.showToast(`Đã ${newStatus ? 'kích hoạt' : 'tạm dừng'} thành viên: ${member.name}`, 'info');
-
-    this.render();
-    if (window.Tracker) Tracker.render();
-    if (window.Checkin) Checkin.render();
-    if (window.Payment) Payment.render();
-  },
-
-  deleteMember(memberId) {
-    const member = Storage.getMemberById(memberId);
-    if (!member) return;
-
-    const confirmMsg = `Bạn có chắc chắn muốn xóa thành viên "${member.name}" không?\n(Lưu ý: Dữ liệu điểm danh của thành viên này sẽ không còn hiển thị)`;
-    if (confirm(confirmMsg)) {
-      Storage.deleteMember(memberId);
-      App.showToast(`Đã xóa thành viên: ${member.name}`, 'info');
+      const newStatus = !member.active;
+      await Storage.updateMember(memberId, { active: newStatus });
+      App.showToast(`Đã ${newStatus ? 'kích hoạt' : 'tạm dừng'} thành viên: ${member.name}`, 'info');
 
       this.render();
       if (window.Tracker) Tracker.render();
       if (window.Checkin) Checkin.render();
       if (window.Payment) Payment.render();
-    }
+    }, null);
+  },
+
+  deleteMember(memberId) {
+    return App.runAction(async () => {
+      const member = Storage.getMemberById(memberId);
+      if (!member) return;
+
+      const confirmMsg = `Bạn có chắc chắn muốn xóa thành viên "${member.name}" không?\n(Lưu ý: Dữ liệu điểm danh của thành viên này sẽ không còn hiển thị)`;
+      if (confirm(confirmMsg)) {
+        await Storage.deleteMember(memberId);
+        App.showToast(`Đã xóa thành viên: ${member.name}`, 'info');
+
+        this.render();
+        if (window.Tracker) Tracker.render();
+        if (window.Checkin) Checkin.render();
+        if (window.Payment) Payment.render();
+      }
+    }, null);
   },
 
   render() {
@@ -154,14 +160,14 @@ const Members = {
           <div class="member-admin-top">
             <div class="member-avatar-info">
               <div class="member-avatar" style="${member.active ? '' : 'opacity: 0.5;'}">
-                ${initials.toUpperCase()}
+                ${window.escapeHtml(initials.toUpperCase())}
               </div>
               <div class="member-name-block">
                 <strong>${window.escapeHtml(member.name)}</strong>
                 <span class="member-subtext">${window.escapeHtml(member.phone || 'Chưa có SĐT')}</span>
               </div>
             </div>
-            
+
             <span class="member-status-pill ${member.active ? 'status-active' : 'status-paused'}">
               ${member.active ? 'Đang ăn' : 'Tạm nghỉ'}
             </span>

@@ -72,7 +72,7 @@ export default {
         });
       } catch (err) {
         console.error('API Error:', err);
-        return errorResponse(err.message || 'Internal Server Error', 500, request);
+        return errorResponse(err.status ? err.message : 'Không thể xử lý yêu cầu. Vui lòng thử lại.', err.status || 500, request);
       }
     }
 
@@ -94,15 +94,16 @@ export default {
   }
 };
 
-const DEFAULT_ADMIN_USER = 'admin';
-// SHA-256 hex digest of 'admin'
-const DEFAULT_ADMIN_PASS_HASH = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-async function sha256Hex(text) {
-  const data = new TextEncoder().encode(String(text));
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+function getAuthConfig(env) {
+  const username = String(env.ADMIN_USERNAME || 'admin').trim().toLowerCase();
+  const password = String(env.ADMIN_PASSWORD || '');
+  const secret = String(env.AUTH_SECRET || '');
+  if (!/^[a-z0-9_-]+$/.test(username) || password.length < 12 || secret.length < 32) {
+    throw Object.assign(new Error('Chưa cấu hình đăng nhập an toàn. Cần ADMIN_PASSWORD (ít nhất 12 ký tự) và AUTH_SECRET (ít nhất 32 ký tự).'), { status: 503 });
+  }
+  return { username, password, secret };
 }
 
 async function hmacSign(payload, secret) {
@@ -119,7 +120,7 @@ async function hmacSign(payload, secret) {
 }
 
 function getTokenSecret(env) {
-  return (env && env.AUTH_SECRET) || 'trua-nay-an-gi-hmac-secret-3995d714-7004-40d6-8f23';
+  return getAuthConfig(env).secret;
 }
 
 async function createAuthToken(username, env) {
@@ -137,9 +138,40 @@ async function verifyAuthRequest(request, env) {
   if (parts.length !== 3) return false;
   const [username, expStr, sig] = parts;
   const exp = Number(expStr);
-  if (!username || !exp || Date.now() > exp) return false;
-  const expectedSig = await hmacSign(`${username}.${expStr}`, getTokenSecret(env));
-  return sig === expectedSig;
+  if (username !== getAuthConfig(env).username || !Number.isSafeInteger(exp) || Date.now() >= exp || !/^[a-f0-9]{64}$/.test(sig)) return false;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(getTokenSecret(env)), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  const signature = Uint8Array.from(sig.match(/.{2}/g), byte => parseInt(byte, 16));
+  return crypto.subtle.verify('HMAC', key, signature, enc.encode(`${username}.${expStr}`));
+}
+
+async function updatePayment(db, yearMonth, memberId, transform) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const existing = await db.prepare('SELECT paid, history_json FROM payments WHERE year_month = ? AND member_id = ?')
+      .bind(yearMonth, memberId).first();
+    let history;
+    try {
+      history = JSON.parse(existing?.history_json || '[]');
+      if (!Array.isArray(history)) throw new Error('Invalid payment history');
+    } catch {
+      throw Object.assign(new Error('Lịch sử thu tiền không hợp lệ; cần kiểm tra dữ liệu trước khi chỉnh sửa.'), { status: 409 });
+    }
+    if (history.length === 0 && existing?.paid > 0) {
+      history = [{ id: `pay_legacy_${memberId}`, amount: Number(existing.paid), method: 'bank', note: 'Đã nộp trước đó', date: `${yearMonth}-01` }];
+    }
+    history = transform(history);
+    const paid = history.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const historyJson = JSON.stringify(history);
+    const result = existing
+      ? await db.prepare(`UPDATE payments SET paid = ?, history_json = ?, updated_at = datetime('now', '+7 hours')
+          WHERE year_month = ? AND member_id = ? AND paid IS ? AND history_json IS ?`)
+        .bind(paid, historyJson, yearMonth, memberId, existing.paid, existing.history_json).run()
+      : await db.prepare(`INSERT INTO payments (year_month, member_id, paid, history_json, updated_at)
+          VALUES (?, ?, ?, ?, datetime('now', '+7 hours')) ON CONFLICT(year_month, member_id) DO NOTHING`)
+        .bind(yearMonth, memberId, paid, historyJson).run();
+    if (result.meta?.changes === 1) return { paid, history };
+  }
+  throw Object.assign(new Error('Có người khác đang cập nhật khoản thu này. Vui lòng thử lại.'), { status: 409 });
 }
 
 async function handleApi(request, env, url) {
@@ -148,6 +180,7 @@ async function handleApi(request, env, url) {
     return errorResponse('D1 Database binding (DB) not configured', 500, request);
   }
 
+  const authConfig = getAuthConfig(env);
   const path = url.pathname;
   const method = request.method;
 
@@ -157,16 +190,7 @@ async function handleApi(request, env, url) {
     const username = String(body.username || '').trim().toLowerCase();
     const password = String(body.password || '');
 
-    const expectedUser = String((env && env.ADMIN_USERNAME) || DEFAULT_ADMIN_USER).trim().toLowerCase();
-    let passOk = false;
-    if (env && env.ADMIN_PASSWORD) {
-      passOk = (password === String(env.ADMIN_PASSWORD));
-    } else {
-      const inputHash = await sha256Hex(password);
-      passOk = (inputHash === DEFAULT_ADMIN_PASS_HASH);
-    }
-
-    if (username !== expectedUser || !passOk) {
+    if (username !== authConfig.username || password !== authConfig.password) {
       return errorResponse('Sai tài khoản hoặc mật khẩu!', 401, request);
     }
 
@@ -184,7 +208,7 @@ async function handleApi(request, env, url) {
   // GET /api/bootstrap?month=YYYY-MM
   if (path === '/api/bootstrap' && method === 'GET') {
     const month = url.searchParams.get('month') || new Date().toISOString().slice(0, 7);
-    
+
     // Batch queries in D1
     const [settingsRes, membersRes, recordsRes, paymentsRes] = await db.batch([
       db.prepare('SELECT key, value FROM settings'),
@@ -224,6 +248,7 @@ async function handleApi(request, env, url) {
     (paymentsRes.results || []).forEach(p => {
       let history = [];
       try { history = JSON.parse(p.history_json || '[]'); } catch(e){}
+      if (history.length === 0 && p.paid > 0) history = [{ id: `pay_legacy_${p.member_id}`, amount: Number(p.paid), method: 'bank', note: 'Đã nộp trước đó', date: `${month}-01` }];
       payments[p.member_id] = {
         paid: p.paid || 0,
         history: history
@@ -237,7 +262,7 @@ async function handleApi(request, env, url) {
       members: membersRes.results || [],
       records,
       payments
-    });
+    }, 200, request);
   }
 
   // 2. MEMBERS CRUD
@@ -260,7 +285,7 @@ async function handleApi(request, env, url) {
 
     const phone = (body.phone || '').trim().slice(0, 30);
     const note = (body.note || '').trim().slice(0, 255);
-    const active = body.active === false ? 0 : 1;
+    const active = (body.active === false || body.active === 0) ? 0 : 1;
 
     await db.prepare(`
       INSERT INTO members (id, name, phone, note, active, updated_at)
@@ -336,7 +361,8 @@ async function handleApi(request, env, url) {
     }
 
     // Giới hạn số lượng bản ghi trong 1 lần cập nhật (tối đa 150)
-    const updates = rawUpdates.slice(0, 150);
+    if (rawUpdates.length > 150) return errorResponse('Mỗi lần chỉ được cập nhật tối đa 150 ô.', 400, request);
+    const updates = rawUpdates;
     const statements = [];
 
     for (const item of updates) {
@@ -387,51 +413,22 @@ async function handleApi(request, env, url) {
     const cleanNote = (note || '').trim().slice(0, 255);
     const cleanDate = (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) ? date : new Date().toISOString().slice(0, 10);
 
-    // Get existing history
-    const existing = await db.prepare('SELECT paid, history_json FROM payments WHERE year_month = ? AND member_id = ?')
-      .bind(yearMonth, memberId).first();
-
-    let history = [];
-    if (existing && existing.history_json) {
-      try { history = JSON.parse(existing.history_json); } catch(e){}
+    const paymentId = body.id || `pay_${crypto.randomUUID()}`;
+    if (typeof paymentId !== 'string' || !/^pay_[a-zA-Z0-9_-]{1,100}$/.test(paymentId)) {
+      return errorResponse('ID giao dịch không hợp lệ', 400, request);
     }
-    if ((!history || history.length === 0) && existing && existing.paid > 0) {
-      history = [{
-        id: 'pay_legacy_' + Date.now(),
-        amount: Number(existing.paid) || 0,
-        method: 'bank',
-        note: 'Đã nộp trước đó',
-        date: `${yearMonth}-01`,
-        createdAt: new Date().toISOString()
-      }];
-    }
-
-    history.push({
-      id: 'pay_' + Date.now(),
-      amount: paidAmount,
-      method: cleanMethod,
-      note: cleanNote,
-      date: cleanDate,
-      createdAt: new Date().toISOString()
+    const item = { id: paymentId, amount: paidAmount, method: cleanMethod, note: cleanNote, date: cleanDate, createdAt: new Date().toISOString() };
+    const payment = await updatePayment(db, yearMonth, memberId, history => {
+      const previous = history.find(h => h.id === paymentId);
+      if (previous) {
+        if (['amount', 'method', 'note', 'date'].some(key => previous[key] !== item[key])) {
+          throw Object.assign(new Error('Mã giao dịch đã được dùng cho khoản thu khác.'), { status: 409 });
+        }
+        return history;
+      }
+      return [...history, item];
     });
-
-    // Giới hạn lịch sử tối đa 100 giao dịch/tháng/người
-    if (history.length > 100) {
-      history = history.slice(-100);
-    }
-
-    const newTotalPaid = history.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
-
-    await db.prepare(`
-      INSERT INTO payments (year_month, member_id, paid, history_json, updated_at)
-      VALUES (?, ?, ?, ?, datetime('now', '+7 hours'))
-      ON CONFLICT(year_month, member_id) DO UPDATE SET
-        paid = excluded.paid,
-        history_json = excluded.history_json,
-        updated_at = excluded.updated_at
-    `).bind(yearMonth, memberId, newTotalPaid, JSON.stringify(history)).run();
-
-    return jsonResponse({ success: true, paid: newTotalPaid, history }, 200, request);
+    return jsonResponse({ success: true, ...payment }, 200, request);
   }
 
   // DELETE /api/payments/:yearMonth/:memberId (or /:historyId)
@@ -445,34 +442,12 @@ async function handleApi(request, env, url) {
       return errorResponse('Tham số tháng hoặc thành viên không hợp lệ', 400, request);
     }
 
-    if (historyId) {
-      if (!/^[a-zA-Z0-9_-]+$/.test(historyId)) {
-        return errorResponse('ID giao dịch không hợp lệ', 400, request);
-      }
-
-      const existing = await db.prepare('SELECT history_json FROM payments WHERE year_month = ? AND member_id = ?')
-        .bind(yearMonth, memberId).first();
-
-      let history = [];
-      if (existing && existing.history_json) {
-        try { history = JSON.parse(existing.history_json); } catch(e){}
-      }
-
-      history = history.filter(h => h.id !== historyId);
-      const newPaid = history.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
-
-      await db.prepare(`
-        UPDATE payments SET paid = ?, history_json = ?, updated_at = datetime('now', '+7 hours')
-        WHERE year_month = ? AND member_id = ?
-      `).bind(newPaid, JSON.stringify(history), yearMonth, memberId).run();
-
-      return jsonResponse({ success: true, paid: newPaid, history }, 200, request);
-    } else {
-      await db.prepare('DELETE FROM payments WHERE year_month = ? AND member_id = ?')
-        .bind(yearMonth, memberId).run();
-
-      return jsonResponse({ success: true, paid: 0, history: [] }, 200, request);
+    if (historyId && !/^[a-zA-Z0-9_-]+$/.test(historyId)) {
+      return errorResponse('ID giao dịch không hợp lệ', 400, request);
     }
+    const payment = await updatePayment(db, yearMonth, memberId,
+      history => historyId ? history.filter(h => h.id !== historyId) : []);
+    return jsonResponse({ success: true, ...payment }, 200, request);
   }
 
   // 5. SETTINGS

@@ -1,544 +1,298 @@
-/**
- * storage.js - Hybrid LocalStorage & Cloudflare D1 Database Adapter
- * Seamlessly works offline and syncs in real-time with Cloudflare D1 SQLite!
- */
-
+/** Server-confirmed writes with a local read cache. */
 const STORAGE_KEY = 'LUNCH_TRACKER_PRO_DATA_V1';
-
+const AUTH_TOKEN_KEY = 'LUNCH_TRACKER_AUTH_TOKEN_V1';
 const DEFAULT_SETTINGS = {
-  mealPrice: 30000,
-  workdays: [1, 2, 3, 4, 5],
-  bankInfo: {
-    bankCode: 'MB',
-    accountNumber: '7700113959999',
-    accountName: 'TRUONG THI BICH PHUONG'
-  },
-  theme: 'light'
+  mealPrice: 30000, workdays: [1, 2, 3, 4, 5], theme: 'light',
+  bankInfo: { bankCode: 'MB', accountNumber: '7700113959999', accountName: 'TRUONG THI BICH PHUONG' }
 };
 
-const AUTH_TOKEN_KEY = 'LUNCH_TRACKER_AUTH_TOKEN_V1';
-
 const Storage = {
+  isCloud: false,
+  _queue: Promise.resolve(),
+
   getToken() {
-    try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch (e) { return ''; }
+    try { return localStorage.getItem(AUTH_TOKEN_KEY) || ''; } catch { return ''; }
   },
-
   setToken(token) {
-    try {
-      if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
-      else localStorage.removeItem(AUTH_TOKEN_KEY);
-    } catch (e) {}
+    if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
+    else localStorage.removeItem(AUTH_TOKEN_KEY);
   },
-
-  clearToken() {
-    this.setToken('');
-  },
-
+  clearToken() { this.setToken(''); },
   isAuthenticated() {
-    const token = this.getToken();
-    if (!token) return false;
-    const parts = token.split('.');
-    if (parts.length === 3) {
-      const exp = Number(parts[1]);
-      if (exp && Date.now() > exp) {
-        this.clearToken();
-        return false;
-      }
-    }
-    return true;
+    const parts = this.getToken().split('.');
+    const exp = Number(parts[1]);
+    return parts.length === 3 && /^[a-z0-9_-]+$/.test(parts[0]) &&
+      Number.isSafeInteger(exp) && exp > Date.now() && /^[a-f0-9]{64}$/.test(parts[2]);
   },
-
   async login(username, password) {
-    const cleanUser = String(username || '').trim().toLowerCase();
-    const cleanPass = String(password || '');
-
-    if (window.location.protocol !== 'file:') {
-      try {
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ username: cleanUser, password: cleanPass })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.success && data.token) {
-          this.setToken(data.token);
-          return { success: true };
-        }
-        return { success: false, error: data.error || 'Sai tài khoản hoặc mật khẩu!' };
-      } catch (err) {
-        // Fallback if local static server without Worker API
-      }
+    if (window.location.protocol === 'file:') {
+      return { success: false, error: 'Hãy mở ứng dụng qua Cloudflare Worker hoặc wrangler dev để đăng nhập.' };
     }
-
-    if (cleanUser === 'admin' && cleanPass === 'admin') {
-      const exp = Date.now() + 30 * 24 * 60 * 60 * 1000;
-      this.setToken(`admin.${exp}.local`);
+    try {
+      const res = await this.apiFetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: String(username || '').trim().toLowerCase(), password: String(password || '') })
+      });
+      const data = await res.json();
+      if (!data.success || !data.token) throw new Error('Phản hồi đăng nhập không hợp lệ.');
+      this.setToken(data.token);
       return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-    return { success: false, error: 'Sai tài khoản hoặc mật khẩu!' };
   },
-
   async apiFetch(url, options = {}) {
     const headers = { ...(options.headers || {}) };
     const token = this.getToken();
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const res = await fetch(url, { ...options, headers });
-    if (res.status === 401) {
-      this.clearToken();
-      if (window.App && typeof window.App.showLoginScreen === 'function') {
-        window.App.showLoginScreen('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(url, { ...options, headers, signal: controller.signal });
+      if (!res.ok) {
+        if (res.status === 401 && url !== '/api/auth/login') {
+          this.clearToken();
+          window.App?.showLoginScreen('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+        }
+        const body = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(body.error || `Không thể lưu hoặc tải dữ liệu (HTTP ${res.status}).`), { status: res.status });
       }
+      return res;
+    } catch (error) {
+      if (error.status) throw error;
+      throw new Error('Chưa xác nhận được dữ liệu với máy chủ. Hãy kiểm tra kết nối và thử lại.');
+    } finally {
+      clearTimeout(timeout);
     }
-    return res;
   },
-  isCloud: false,
-  cloudChecked: false,
-
-  /**
-   * Check connection to Cloudflare D1 Backend
-   */
-  async checkCloudConnection(yearMonth) {
-    if (window.location.protocol === 'file:') {
+  enqueue(operation) {
+    const result = this._queue.then(operation);
+    this._queue = result.catch(() => {});
+    return result;
+  },
+  async write(url, body, method = 'POST') {
+    if (window.location.protocol === 'file:') throw new Error('Cần mở ứng dụng qua máy chủ để lưu dữ liệu.');
+    try {
+      const res = await this.apiFetch(url, {
+        method, headers: { 'Content-Type': 'application/json' },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Máy chủ chưa xác nhận lưu dữ liệu.');
+      this.isCloud = true;
+      this.updateCloudStatusBadge(true);
+      return data;
+    } catch (error) {
       this.isCloud = false;
       this.updateCloudStatusBadge(false);
-      return false;
+      throw error;
     }
-
-    try {
-      const ym = yearMonth || new Date().toISOString().slice(0, 7);
-      const res = await this.apiFetch(`/api/bootstrap?month=${ym}`, {
-        headers: { 'Accept': 'application/json' }
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success) {
-          this.isCloud = true;
-          this.updateCloudStatusBadge(true);
-          
-          // Merge remote D1 data into LocalStorage cache
-          const local = this.loadData();
-          local.settings = { ...local.settings, ...json.settings };
-          local.members = json.members || [];
-          local.records = { ...local.records, ...(json.records || {}) };
-          local.payments[ym] = json.payments || {};
-
-          this.saveData(local);
-          return true;
-        }
-      }
-    } catch (e) {
-      console.warn('Running in offline LocalStorage mode:', e.message);
-    }
-
-    this.isCloud = false;
-    this.updateCloudStatusBadge(false);
-    return false;
   },
-
+  checkCloudConnection(yearMonth) {
+    return this.enqueue(async () => {
+      try {
+        const ym = yearMonth || new Date().toISOString().slice(0, 7);
+        const res = await this.apiFetch(`/api/bootstrap?month=${encodeURIComponent(ym)}`);
+        const json = await res.json();
+        if (!json.success) throw new Error('Không tải được dữ liệu.');
+        const local = this.loadData();
+        local.settings = { ...local.settings, ...json.settings };
+        local.members = (json.members || []).map(m => ({ ...m, active: !!m.active }));
+        // Replace the complete month, including days deleted on another device.
+        Object.keys(local.records).filter(date => date.startsWith(ym + '-')).forEach(date => delete local.records[date]);
+        Object.assign(local.records, json.records || {});
+        local.payments[ym] = json.payments || {};
+        this.saveData(local);
+        for (const [memberId, payment] of Object.entries(json.payments || {})) {
+          const key = this.pendingPaymentKey(ym, memberId);
+          const attempt = JSON.parse(localStorage.getItem(key) || 'null');
+          if (attempt && payment.history?.some(h => h.id === attempt.id)) localStorage.removeItem(key);
+        }
+        this.isCloud = true;
+        this.updateCloudStatusBadge(true);
+        return true;
+      } catch (error) {
+        this.isCloud = false;
+        this.updateCloudStatusBadge(false);
+        console.warn('Không tải được dữ liệu máy chủ:', error.message);
+        return false;
+      }
+    });
+  },
   updateCloudStatusBadge(isOnline) {
     let badge = document.getElementById('cloudStatusIndicator');
     if (!badge) {
-      const headerActions = document.querySelector('.header-actions');
-      if (headerActions) {
-        badge = document.createElement('div');
-        badge.id = 'cloudStatusIndicator';
-        badge.className = 'price-chip';
-        badge.style.cursor = 'default';
-        headerActions.insertBefore(badge, headerActions.firstChild);
-      }
+      const actions = document.querySelector('.header-actions');
+      if (!actions) return;
+      badge = document.createElement('div');
+      badge.id = 'cloudStatusIndicator'; badge.className = 'price-chip';
+      actions.insertBefore(badge, actions.firstChild);
     }
-
-    if (badge) {
-      if (isOnline) {
-        badge.innerHTML = `<span style="font-size:11px;">☁️ D1 Cloud</span>`;
-        badge.style.background = 'var(--primary-50)';
-        badge.style.borderColor = 'var(--primary-200)';
-        badge.style.color = 'var(--primary-700)';
-        badge.title = 'Đã kết nối cơ sở dữ liệu Cloudflare D1 (SQLite trên mây). Dữ liệu được đồng bộ thời gian thực!';
-      } else {
-        badge.innerHTML = `<span style="font-size:11px;">💾 Local</span>`;
-        badge.style.background = 'var(--bg-surface-subtle)';
-        badge.style.borderColor = 'var(--border-default)';
-        badge.style.color = 'var(--text-muted)';
-        badge.title = 'Đang lưu trữ ngoại tuyến tại trình duyệt máy này (LocalStorage).';
-      }
-    }
+    badge.textContent = isOnline ? '☁️ Đã kết nối' : '⚠️ Chưa kết nối';
+    badge.title = isOnline ? 'Các thay đổi được xác nhận trên máy chủ trước khi báo thành công.' : 'Đang xem dữ liệu đã lưu trên máy này. Cần kết nối máy chủ để lưu thay đổi.';
   },
-
-  /**
-   * Load entire application data from cache
-   */
   loadData() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        return this.initDefaultData();
-      }
-      const data = JSON.parse(raw);
-      
-      if (!data.settings) data.settings = { ...DEFAULT_SETTINGS };
-      if (!data.members) data.members = [];
-      if (!data.records) data.records = {};
-      if (!data.payments) data.payments = {};
-      
-      return data;
-    } catch (err) {
-      console.error('Failed to load data:', err);
-      return this.initDefaultData();
-    }
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    return { settings: { ...DEFAULT_SETTINGS, ...data.settings }, members: data.members || [], records: data.records || {}, payments: data.payments || {} };
   },
-
   saveData(data) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      return true;
-    } catch (err) {
-      console.error('Failed to save data:', err);
-      return false;
-    }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); return true; }
+    catch { throw new Error('Không lưu được bộ nhớ trình duyệt. Hãy tải lại để kiểm tra dữ liệu trên máy chủ.'); }
   },
-
-  initDefaultData() {
-    const initialData = {
-      settings: { ...DEFAULT_SETTINGS },
-      members: [],
-      records: {},
-      payments: {}
-    };
-    this.saveData(initialData);
-    return initialData;
-  },
-
-  /* ================= MEMBER CRUD ================= */
-  getMembers() {
-    const data = this.loadData();
-    return data.members || [];
-  },
-
-  getMemberById(id) {
-    const members = this.getMembers();
-    return members.find(m => m.id === id) || null;
-  },
-
+  createId(prefix) { return `${prefix}_${crypto.randomUUID()}`; },
+  getMembers() { return this.loadData().members; },
+  getMemberById(id) { return this.getMembers().find(m => m.id === id) || null; },
   addMember(memberData) {
-    const data = this.loadData();
-    const newMember = {
-      id: 'm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-      name: memberData.name.trim(),
-      phone: (memberData.phone || '').trim(),
-      note: (memberData.note || '').trim(),
-      active: memberData.active !== false,
-      createdAt: new Date().toISOString()
-    };
-    data.members.push(newMember);
-    this.saveData(data);
-
-    if (this.isCloud) {
-      this.apiFetch('/api/members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newMember)
-      }).catch(err => console.error('Cloud sync error:', err));
-    }
-
-    return newMember;
-  },
-
-  updateMember(id, updateFields) {
-    const data = this.loadData();
-    const idx = data.members.findIndex(m => m.id === id);
-    if (idx !== -1) {
-      data.members[idx] = {
-        ...data.members[idx],
-        ...updateFields,
-        name: updateFields.name ? updateFields.name.trim() : data.members[idx].name,
-        phone: updateFields.phone !== undefined ? updateFields.phone.trim() : data.members[idx].phone,
-        note: updateFields.note !== undefined ? updateFields.note.trim() : data.members[idx].note,
-        updatedAt: new Date().toISOString()
-      };
+    const member = { ...memberData, id: this.createId('m') };
+    return this.enqueue(async () => {
+      const result = await this.write('/api/members', member);
+      const data = this.loadData();
+      data.members.push(result.member);
       this.saveData(data);
-
-      if (this.isCloud) {
-        this.apiFetch('/api/members', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data.members[idx])
-        }).catch(err => console.error('Cloud sync error:', err));
-      }
-
-      return data.members[idx];
-    }
-    return null;
+      return result.member;
+    });
   },
-
+  updateMember(id, fields) {
+    return this.enqueue(async () => {
+      const data = this.loadData();
+      const index = data.members.findIndex(m => m.id === id);
+      if (index < 0) throw new Error('Không tìm thấy thành viên.');
+      const result = await this.write('/api/members', { ...data.members[index], ...fields });
+      data.members[index] = { ...data.members[index], ...result.member };
+      this.saveData(data);
+      return data.members[index];
+    });
+  },
   deleteMember(id) {
-    const data = this.loadData();
-    data.members = data.members.filter(m => m.id !== id);
-    this.saveData(data);
-
-    if (this.isCloud) {
-      this.apiFetch(`/api/members/${id}`, { method: 'DELETE' })
-        .catch(err => console.error('Cloud sync error:', err));
-    }
-
-    return true;
+    return this.enqueue(async () => {
+      await this.write(`/api/members/${encodeURIComponent(id)}`, undefined, 'DELETE');
+      const data = this.loadData();
+      data.members = data.members.filter(m => m.id !== id);
+      Object.values(data.records).forEach(day => delete day[id]);
+      Object.values(data.payments).forEach(month => delete month[id]);
+      this.saveData(data);
+      return true;
+    });
   },
-
-  /* ================= DAILY RECORDS CRUD ================= */
-  getDayRecords(dateStr) {
-    const data = this.loadData();
-    return data.records[dateStr] || {};
+  getDayRecords(date) { return this.loadData().records[date] || {}; },
+  normalizeRecord(record) {
+    if (!record || record.clear || record.count == null || Number(record.count) < 0) return null;
+    return {
+      count: Math.max(0, Math.min(50, Math.floor(Number(record.count) || 0))),
+      note: String(record.note || '').trim().slice(0, 255),
+      price: record.price == null || record.price === '' ? null : Math.max(0, Math.min(5000000, Math.floor(Number(record.price) || 0)))
+    };
   },
-
-  setRecord(dateStr, memberId, recordObj) {
-    const data = this.loadData();
-    if (!data.records[dateStr]) {
-      data.records[dateStr] = {};
-    }
-
-    const isClear = !recordObj || recordObj.count === null || recordObj.count === undefined || Number(recordObj.count) < 0;
-    const count = isClear ? -1 : Math.max(0, Number(recordObj.count) || 0);
-    const note = recordObj ? (recordObj.note || '').trim() : '';
-    const price = (recordObj && recordObj.price !== undefined && recordObj.price !== null && recordObj.price !== '') ? Number(recordObj.price) : null;
-
-    if (count < 0) {
-      delete data.records[dateStr][memberId];
-      if (Object.keys(data.records[dateStr]).length === 0) {
-        delete data.records[dateStr];
-      }
-    } else {
-      const entry = { count, note };
-      if (price !== null && price > 0) entry.price = price;
-      data.records[dateStr][memberId] = entry;
-    }
-
-    this.saveData(data);
-
-    if (this.isCloud) {
-      this.apiFetch('/api/records', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: dateStr, memberId, count, note, price, clear: isClear })
-      }).catch(err => console.error('Cloud sync error:', err));
-    }
-  },
-
-  batchSetRecords(updates) {
-    const data = this.loadData();
-    updates.forEach(u => {
-      const { date, memberId, count, note } = u;
+  applyRecord(data, date, memberId, record) {
+    if (record) {
       if (!data.records[date]) data.records[date] = {};
-      if (count < 0) {
-        delete data.records[date][memberId];
-        if (Object.keys(data.records[date]).length === 0) delete data.records[date];
-      } else {
-        data.records[date][memberId] = { count, note: note || '' };
-      }
-    });
-    this.saveData(data);
-
-    if (this.isCloud && updates.length > 0) {
-      this.apiFetch('/api/records/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates })
-      }).catch(err => console.error('Cloud sync error:', err));
+      data.records[date][memberId] = record;
+    } else if (data.records[date]) {
+      delete data.records[date][memberId];
+      if (!Object.keys(data.records[date]).length) delete data.records[date];
     }
   },
-
-  /**
-   * Returns true if dateStr (YYYY-MM-DD) is after today (local time).
-   */
-  isFutureDate(dateStr) {
+  setRecord(date, memberId, record) {
+    return this.enqueue(async () => {
+      const normalized = this.normalizeRecord(record);
+      await this.write('/api/records', { date, memberId, ...(normalized || { clear: true }) });
+      const data = this.loadData();
+      this.applyRecord(data, date, memberId, normalized);
+      this.saveData(data);
+    });
+  },
+  batchSetRecords(updates) {
+    return this.enqueue(async () => {
+      for (let offset = 0; offset < updates.length; offset += 150) {
+        const chunk = updates.slice(offset, offset + 150).map(u => ({ date: u.date, memberId: u.memberId, ...(this.normalizeRecord(u) || { clear: true }) }));
+        await this.write('/api/records/batch', { updates: chunk });
+        const data = this.loadData();
+        chunk.forEach(u => this.applyRecord(data, u.date, u.memberId, this.normalizeRecord(u)));
+        this.saveData(data);
+      }
+    });
+  },
+  isFutureDate(date) {
     const now = new Date();
-    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    return dateStr > todayStr;
+    return date > `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   },
-
-  /**
-   * Record to store when a cell is unchecked:
-   * - Today / past dates: explicit "not eating" ({ count: 0 }) -> shows ✕
-   * - Future dates: cleared (null) -> shows · (undecided)
-   */
-  getUncheckedRecord(dateStr) {
-    return this.isFutureDate(dateStr) ? null : { count: 0, note: '' };
+  getUncheckedRecord(date) { return this.isFutureDate(date) ? null : { count: 0, note: '' }; },
+  toggleRecord(date, memberId) {
+    const record = this.getDayRecords(date)[memberId];
+    return this.setRecord(date, memberId, record?.count > 0 ? this.getUncheckedRecord(date) : { count: 1, note: '' });
   },
-
-  toggleRecord(dateStr, memberId) {
-    const current = this.getDayRecords(dateStr)[memberId];
-    if (current && current.count > 0) {
-      this.setRecord(dateStr, memberId, this.getUncheckedRecord(dateStr));
-      return 0;
-    } else {
-      this.setRecord(dateStr, memberId, { count: 1, note: '' });
-      return 1;
-    }
-  },
-
   getMonthRecords(yearMonth) {
-    const data = this.loadData();
-    const result = {};
-    Object.keys(data.records).forEach(d => {
-      if (d.startsWith(yearMonth)) {
-        result[d] = data.records[d];
-      }
-    });
-    return result;
+    return Object.fromEntries(Object.entries(this.loadData().records).filter(([date]) => date.startsWith(yearMonth + '-')));
   },
-
-  /* ================= PAYMENTS CRUD ================= */
-  getMonthPayments(yearMonth) {
-    const data = this.loadData();
-    return data.payments[yearMonth] || {};
-  },
-
+  getMonthPayments(yearMonth) { return this.loadData().payments[yearMonth] || {}; },
   getMemberPayment(yearMonth, memberId) {
-    const payments = this.getMonthPayments(yearMonth);
-    const p = payments[memberId] || { paid: 0, status: 'unpaid', history: [] };
-    if (p.paid > 0 && (!p.history || p.history.length === 0)) {
-      p.history = [{
-        id: 'pay_legacy_' + memberId,
-        amount: Number(p.paid) || 0,
-        method: 'bank',
-        note: 'Khoản thu đã ghi nhận',
-        date: `${yearMonth}-01`,
-        createdAt: new Date().toISOString()
-      }];
+    const payment = this.getMonthPayments(yearMonth)[memberId] || { paid: 0, history: [] };
+    if (payment.paid > 0 && !payment.history?.length) {
+      payment.history = [{ id: `pay_legacy_${memberId}`, amount: payment.paid, method: 'bank', note: 'Đã nộp trước đó', date: `${yearMonth}-01` }];
     }
-    return p;
+    return payment;
   },
-
-  recordPayment(yearMonth, memberId, amount, method = 'bank', note = '', date = '') {
+  cachePayment(yearMonth, memberId, payment) {
     const data = this.loadData();
-    if (!data.payments[yearMonth]) {
-      data.payments[yearMonth] = {};
-    }
-
-    const current = data.payments[yearMonth][memberId] || { paid: 0, history: [] };
-    const numericAmount = Math.max(0, Number(amount) || 0);
-
-    let existingHistory = Array.isArray(current.history) ? [...current.history] : [];
-    if (existingHistory.length === 0 && current.paid > 0) {
-      existingHistory = [{
-        id: 'pay_legacy_' + Date.now(),
-        amount: Number(current.paid) || 0,
-        method: 'bank',
-        note: 'Đã nộp trước đó',
-        date: `${yearMonth}-01`,
-        createdAt: new Date().toISOString()
-      }];
-    }
-
-    const historyItem = {
-      id: 'pay_' + Date.now(),
-      amount: numericAmount,
-      method: method,
-      note: note.trim(),
-      date: date || new Date().toISOString().slice(0, 10),
-      createdAt: new Date().toISOString()
-    };
-
-    const updatedHistory = [...existingHistory, historyItem];
-    const newPaid = updatedHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
-
-    data.payments[yearMonth][memberId] = {
-      paid: newPaid,
-      history: updatedHistory,
-      lastUpdated: new Date().toISOString()
-    };
-
+    if (!data.payments[yearMonth]) data.payments[yearMonth] = {};
+    data.payments[yearMonth][memberId] = { paid: payment.paid, history: payment.history };
     this.saveData(data);
-
-    if (this.isCloud) {
-      this.apiFetch('/api/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          yearMonth,
-          memberId,
-          amount: numericAmount,
-          method,
-          note,
-          date
-        })
-      }).catch(err => console.error('Cloud sync error:', err));
-    }
-
     return data.payments[yearMonth][memberId];
   },
-
+  pendingPaymentKey(yearMonth, memberId) { return `LUNCH_TRACKER_PENDING_PAYMENT_${yearMonth}_${memberId}`; },
+  getPendingPayment(yearMonth, memberId) {
+    return JSON.parse(localStorage.getItem(this.pendingPaymentKey(yearMonth, memberId)) || 'null');
+  },
+  recordPayment(yearMonth, memberId, amount, method = 'bank', note = '', date = '') {
+    return this.enqueue(async () => {
+      const input = { yearMonth, memberId, amount: Math.max(0, Math.min(50000000, Math.floor(Number(amount) || 0))), method, note: String(note).trim().slice(0, 255), date: date || new Date().toISOString().slice(0, 10) };
+      const key = this.pendingPaymentKey(yearMonth, memberId);
+      const previous = JSON.parse(localStorage.getItem(key) || 'null');
+      if (previous && JSON.stringify(previous.input) !== JSON.stringify(input)) {
+        throw new Error('Khoản thu trước chưa được xác nhận. Hãy tải lại dữ liệu hoặc gửi lại đúng khoản thu trước trước khi nhập khoản khác.');
+      }
+      const attempt = previous || { id: this.createId('pay'), input };
+      localStorage.setItem(key, JSON.stringify(attempt));
+      try {
+        const payment = await this.write('/api/payments', { id: attempt.id, ...input });
+        const cached = this.cachePayment(yearMonth, memberId, payment);
+        localStorage.removeItem(key);
+        return cached;
+      } catch (error) {
+        if (error.status >= 400 && error.status < 500 && error.status !== 409) localStorage.removeItem(key);
+        throw error;
+      }
+    });
+  },
   deletePayment(yearMonth, memberId) {
-    const data = this.loadData();
-    if (data.payments[yearMonth] && data.payments[yearMonth][memberId]) {
-      data.payments[yearMonth][memberId] = { paid: 0, history: [], lastUpdated: new Date().toISOString() };
-      this.saveData(data);
-    }
-
-    if (this.isCloud) {
-      this.apiFetch(`/api/payments/${yearMonth}/${memberId}`, { method: 'DELETE' })
-        .catch(err => console.error('Cloud delete payment error:', err));
-    }
-
-    return true;
+    return this.enqueue(async () => {
+      const payment = await this.write(`/api/payments/${encodeURIComponent(yearMonth)}/${encodeURIComponent(memberId)}`, undefined, 'DELETE');
+      return this.cachePayment(yearMonth, memberId, payment);
+    });
   },
-
   deletePaymentHistoryItem(yearMonth, memberId, historyId) {
-    const data = this.loadData();
-    if (data.payments[yearMonth] && data.payments[yearMonth][memberId]) {
-      const current = data.payments[yearMonth][memberId];
-      const updatedHistory = (current.history || []).filter(h => h.id !== historyId);
-      const newPaid = updatedHistory.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
-      data.payments[yearMonth][memberId] = {
-        paid: newPaid,
-        history: updatedHistory,
-        lastUpdated: new Date().toISOString()
-      };
-      this.saveData(data);
-    }
-
-    if (this.isCloud) {
-      this.apiFetch(`/api/payments/${yearMonth}/${memberId}/${historyId}`, { method: 'DELETE' })
-        .catch(err => console.error('Cloud delete history error:', err));
-    }
-
-    return true;
+    return this.enqueue(async () => {
+      const payment = await this.write(`/api/payments/${encodeURIComponent(yearMonth)}/${encodeURIComponent(memberId)}/${encodeURIComponent(historyId)}`, undefined, 'DELETE');
+      return this.cachePayment(yearMonth, memberId, payment);
+    });
   },
-
-  /* ================= SETTINGS ================= */
   getSettings() {
-    const data = this.loadData();
-    const settings = data.settings || { ...DEFAULT_SETTINGS };
-    if (window.AppConfig && window.AppConfig.bankInfo) {
-      settings.bankInfo = { ...window.AppConfig.bankInfo };
-    }
+    const settings = this.loadData().settings;
+    if (window.AppConfig?.bankInfo) settings.bankInfo = { ...window.AppConfig.bankInfo };
     return settings;
   },
-
-  updateSettings(newSettings) {
-    const data = this.loadData();
-    // Khóa không cho phép sửa đổi thông tin ngân hàng qua client/giao diện
-    const safeSettings = { ...newSettings };
-    delete safeSettings.bankInfo;
-
-    data.settings = { ...data.settings, ...safeSettings };
-    if (window.AppConfig && window.AppConfig.bankInfo) {
-      data.settings.bankInfo = { ...window.AppConfig.bankInfo };
-    }
-    this.saveData(data);
-
-    if (this.isCloud) {
-      this.apiFetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(safeSettings)
-      }).catch(err => console.error('Cloud sync error:', err));
-    }
-
-    return data.settings;
+  updateSettings(fields) {
+    return this.enqueue(async () => {
+      const safe = {};
+      if (fields.mealPrice !== undefined) safe.mealPrice = Math.max(1000, Math.min(2000000, Math.floor(Number(fields.mealPrice) || 40000)));
+      if (fields.theme) safe.theme = fields.theme === 'dark' ? 'dark' : 'light';
+      await this.write('/api/settings', safe);
+      const data = this.loadData();
+      data.settings = { ...data.settings, ...safe };
+      this.saveData(data);
+      return data.settings;
+    });
   }
 };
-
 window.Storage = Storage;

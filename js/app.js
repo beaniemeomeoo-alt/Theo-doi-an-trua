@@ -56,6 +56,7 @@ const App = {
         Tracker.render();
         Payment.render();
         if (window.Checkin) Checkin.render();
+        if (window.Members) Members.render();
       }
     } catch(err) {
       console.warn('Offline mode:', err);
@@ -184,7 +185,7 @@ const App = {
     const handlePeriodChange = async (y, m) => {
       Tracker.setPeriod(y, m);
       Payment.render();
-      if (Storage.isCloud) {
+      if (Storage.isAuthenticated()) {
         await Storage.checkCloudConnection(`${y}-${String(m).padStart(2, '0')}`);
         Tracker.render();
         Payment.render();
@@ -249,17 +250,18 @@ const App = {
 
     const btnTheme = document.getElementById('btnThemeToggle');
     if (btnTheme) {
-      btnTheme.addEventListener('click', () => {
-        const nowDark = document.body.classList.toggle('theme-dark');
+      btnTheme.addEventListener('click', () => this.runAction(async () => {
+        const nowDark = !document.body.classList.contains('theme-dark');
+        await Storage.updateSettings({ theme: nowDark ? 'dark' : 'light' });
+        document.body.classList.toggle('theme-dark', nowDark);
         document.body.classList.toggle('theme-light', !nowDark);
-        Storage.updateSettings({ theme: nowDark ? 'dark' : 'light' });
-      });
+      }, btnTheme));
     }
   },
 
   refreshSettingsUI() {
     const settings = Storage.getSettings();
-    
+
     // Header Price Display
     const price = settings.mealPrice || 30000;
     const headerPrice = document.getElementById('headerPriceDisplay');
@@ -277,16 +279,16 @@ const App = {
     // Save Price
     const btnSavePrice = document.getElementById('btnSavePriceSetting');
     if (btnSavePrice) {
-      btnSavePrice.addEventListener('click', () => {
+      btnSavePrice.addEventListener('click', () => this.runAction(async () => {
         const inputPrice = document.getElementById('inputSettingPrice');
         const price = Math.max(1000, Number(inputPrice.value) || 30000);
-        Storage.updateSettings({ mealPrice: price });
+        await Storage.updateSettings({ mealPrice: price });
         this.refreshSettingsUI();
         Tracker.render();
         Checkin.render();
         Payment.render();
         this.showToast('Đã lưu giá cơm thành công!', 'success');
-      });
+      }, btnSavePrice));
     }
   },
 
@@ -331,6 +333,21 @@ const App = {
     }
   },
 
+  async runAction(action, button = null) {
+    if (button?.disabled) return;
+    if (button) button.disabled = true;
+    try {
+      return await action();
+    } catch (error) {
+      this.showToast(error.message || 'Không thể lưu thay đổi. Vui lòng thử lại.', 'error');
+      if (window.Tracker) Tracker.render();
+      if (window.Checkin?.selectedDate) Checkin.render();
+      if (window.Payment) Payment.render();
+    } finally {
+      if (button) button.disabled = false;
+    }
+  },
+
   /* ================= TOAST NOTIFICATIONS ================= */
   showToast(message, type = 'info') {
     const container = document.getElementById('toastContainer');
@@ -340,7 +357,11 @@ const App = {
     toast.className = `toast toast-${type}`;
 
     const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
-    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    const iconNode = document.createElement('span');
+    iconNode.textContent = icon;
+    const messageNode = document.createElement('span');
+    messageNode.textContent = String(message);
+    toast.append(iconNode, messageNode);
 
     container.appendChild(toast);
 

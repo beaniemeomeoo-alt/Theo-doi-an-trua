@@ -74,7 +74,7 @@ const Checkin = {
     const newY = dateObj.getFullYear();
     const newM = String(dateObj.getMonth() + 1).padStart(2, '0');
     const newD = String(dateObj.getDate()).padStart(2, '0');
-    
+
     this.selectedDate = `${newY}-${newM}-${newD}`;
     const dateInput = document.getElementById('inputCheckinDate');
     if (dateInput) dateInput.value = this.selectedDate;
@@ -149,7 +149,7 @@ const Checkin = {
         <div class="checkin-card ${isEating ? 'card-eating' : ''}" data-member-id="${member.id}">
           <div class="checkin-card-header">
             <div class="member-avatar-info">
-              <div class="member-avatar">${initials.toUpperCase()}</div>
+              <div class="member-avatar">${window.escapeHtml(initials.toUpperCase())}</div>
               <div class="member-name-block">
                 <strong>${window.escapeHtml(member.name)}</strong>
                 <span class="member-subtext">${window.escapeHtml(member.note || member.phone || 'Thành viên')}</span>
@@ -169,7 +169,7 @@ const Checkin = {
               <button class="qty-btn" data-action="inc-qty">+</button>
             </div>
 
-            <input type="text" class="checkin-note-input" placeholder="Ghi chú (không cơm, thêm canh...)" value="${note.replace(/"/g, '&quot;')}" data-action="update-note">
+            <input type="text" class="checkin-note-input" placeholder="Ghi chú (không cơm, thêm canh...)" value="${window.escapeHtml(note)}" data-action="update-note">
           </div>
         </div>
       `;
@@ -196,70 +196,67 @@ const Checkin = {
       // Toggle Eating / Resting Switch
       const switchBtn = card.querySelector('[data-action="toggle-status"]');
       if (switchBtn) {
-        switchBtn.addEventListener('click', () => {
-          Storage.toggleRecord(this.selectedDate, memberId);
+        switchBtn.addEventListener('click', () => App.runAction(async () => {
+          await Storage.toggleRecord(this.selectedDate, memberId);
           this.render();
           if (window.Tracker) Tracker.render();
           if (window.Payment) Payment.render();
-        });
+        }, switchBtn));
       }
 
       // Increase quantity
       const incBtn = card.querySelector('[data-action="inc-qty"]');
       if (incBtn) {
-        incBtn.addEventListener('click', () => {
+        incBtn.addEventListener('click', () => App.runAction(async () => {
           const current = Storage.getDayRecords(this.selectedDate)[memberId] || { count: 1, note: '' };
           const newCount = Math.min(10, (current.count || 1) + 1);
-          Storage.setRecord(this.selectedDate, memberId, { ...current, count: newCount });
+          await Storage.setRecord(this.selectedDate, memberId, { ...current, count: newCount });
           this.render();
           if (window.Tracker) Tracker.render();
           if (window.Payment) Payment.render();
-        });
+        }, incBtn));
       }
 
       // Decrease quantity
       const decBtn = card.querySelector('[data-action="dec-qty"]');
       if (decBtn) {
-        decBtn.addEventListener('click', () => {
+        decBtn.addEventListener('click', () => App.runAction(async () => {
           const current = Storage.getDayRecords(this.selectedDate)[memberId] || { count: 1, note: '' };
           const newCount = Math.max(1, (current.count || 1) - 1);
-          Storage.setRecord(this.selectedDate, memberId, { ...current, count: newCount });
+          await Storage.setRecord(this.selectedDate, memberId, { ...current, count: newCount });
           this.render();
           if (window.Tracker) Tracker.render();
           if (window.Payment) Payment.render();
-        });
+        }, decBtn));
       }
 
       // Note input blur / enter
       const noteInput = card.querySelector('[data-action="update-note"]');
       if (noteInput) {
-        noteInput.addEventListener('change', () => {
+        noteInput.addEventListener('change', () => App.runAction(async () => {
           const current = Storage.getDayRecords(this.selectedDate)[memberId] || { count: 1, note: '' };
-          Storage.setRecord(this.selectedDate, memberId, { ...current, note: noteInput.value.trim() });
+          await Storage.setRecord(this.selectedDate, memberId, { ...current, note: noteInput.value.trim() });
           if (window.Tracker) Tracker.render();
-        });
+        }, noteInput));
       }
     });
   },
 
   setAllStatus(shouldEat) {
-    const members = Storage.getMembers().filter(m => m.active);
-    members.forEach(member => {
-      if (shouldEat) {
+    return App.runAction(async () => {
+      const members = Storage.getMembers().filter(m => m.active);
+      const updates = members.map(member => {
         const existing = Storage.getDayRecords(this.selectedDate)[member.id];
-        Storage.setRecord(this.selectedDate, member.id, {
-          count: existing?.count || 1,
-          note: existing?.note || ''
-        });
-      } else {
-        Storage.setRecord(this.selectedDate, member.id, Storage.getUncheckedRecord(this.selectedDate));
-      }
-    });
+        const record = shouldEat ? { ...existing, count: existing?.count || 1, note: existing?.note || '' } : Storage.getUncheckedRecord(this.selectedDate);
+        return { date: this.selectedDate, memberId: member.id, ...(record || { clear: true }) };
+      });
+      await Storage.batchSetRecords(updates);
 
-    App.showToast(shouldEat ? 'Đã đánh dấu tất cả ăn cơm!' : 'Đã bỏ chọn tất cả!', 'info');
-    this.render();
-    if (window.Tracker) Tracker.render();
-    if (window.Payment) Payment.render();
+      App.showToast(shouldEat ? 'Đã đánh dấu tất cả ăn cơm!' : 'Đã bỏ chọn tất cả!', 'info');
+      this.render();
+      if (window.Tracker) Tracker.render();
+      if (window.Payment) Payment.render();
+    }, document.getElementById(shouldEat ? 'btnCheckAllToday' : 'btnUncheckAllToday'));
   },
 
   updateDayStats(totalMeals, peopleEating, totalPeople, totalCost) {

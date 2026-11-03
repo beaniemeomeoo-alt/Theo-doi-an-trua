@@ -7,11 +7,13 @@ const Tracker = {
   currentYear: new Date().getFullYear(),
   currentMonth: new Date().getMonth() + 1, // 1-12
   selectedCell: null, // { memberId, dateStr, count, note }
-  
+
   // Drag to select / paint state
   isDragging: false,
   dragTargetValue: 1, // 1 (eat) or 0 (not eat)
   draggedCells: new Set(),
+  dragUpdates: new Map(),
+  isSaving: false,
 
   init() {
     this.bindEvents();
@@ -96,7 +98,7 @@ const Tracker = {
     const year = this.currentYear;
     const month = this.currentMonth;
     const yearMonth = this.getYearMonthStr();
-    
+
     // Update display labels
     const labelMonth = document.getElementById('labelCurrentMonth');
     if (labelMonth) {
@@ -204,6 +206,14 @@ const Tracker = {
     filteredMembers.forEach((member, index) => {
       let memberTotalMeals = 0;
       let memberTotalAmount = 0;
+      for (const dayRecords of Object.values(monthRecords)) {
+        const record = dayRecords[member.id];
+        if (record?.count > 0) {
+          const price = record.price != null && record.price !== '' ? Number(record.price) : unitPrice;
+          memberTotalMeals += record.count;
+          memberTotalAmount += record.count * price;
+        }
+      }
 
       let rowHtml = `
         <tr data-member-id="${window.escapeHtml(member.id)}">
@@ -224,11 +234,8 @@ const Tracker = {
         const count = record?.count || 0;
         const note = record?.note || '';
         const customPrice = (record?.price !== undefined && record?.price !== null && record?.price !== '') ? Number(record.price) : null;
-        const itemPrice = (customPrice !== null && customPrice > 0) ? customPrice : unitPrice;
 
         if (count > 0) {
-          memberTotalMeals += count;
-          memberTotalAmount += count * itemPrice;
           dayTotals[day] += count;
         }
 
@@ -406,6 +413,7 @@ const Tracker = {
   },
 
   startDrag(cell, e) {
+    if (this.isSaving) return;
     if (e && e.button !== undefined && e.button !== 0) return;
 
     const memberId = cell.getAttribute('data-member-id');
@@ -416,6 +424,7 @@ const Tracker = {
     // If currently 0 (empty), paint 1 (eat). If already eating (>=1), paint 0 (clear/uncheck)
     this.dragTargetValue = (currentCount === 0) ? 1 : 0;
     this.draggedCells = new Set();
+    this.dragUpdates = new Map();
     document.body.classList.add('is-drag-painting');
 
     this.paintCell(cell);
@@ -433,7 +442,7 @@ const Tracker = {
 
     const targetVal = this.dragTargetValue;
     if (targetVal === 1) {
-      Storage.setRecord(dateStr, memberId, { count: 1, note: '' });
+      this.dragUpdates.set(key, { date: dateStr, memberId, count: 1, note: '' });
       cell.classList.remove('cell-none', 'cell-extra', 'cell-absent');
       cell.classList.add('cell-eat');
       cell.setAttribute('data-count', '1');
@@ -441,7 +450,7 @@ const Tracker = {
       if (inner) inner.textContent = '✓';
     } else {
       const uncheckedRecord = Storage.getUncheckedRecord(dateStr);
-      Storage.setRecord(dateStr, memberId, uncheckedRecord);
+      this.dragUpdates.set(key, { date: dateStr, memberId, ...(uncheckedRecord || { clear: true }) });
       // Explicit "not eating" (today/past) or auto-absent date (e.g. Sunday) -> ✕, otherwise -> ·
       const showAbsent = uncheckedRecord !== null || this.isAbsentDate(dateStr);
       cell.classList.remove('cell-eat', 'cell-extra', 'cell-has-note', 'cell-none', 'cell-absent');
@@ -458,25 +467,24 @@ const Tracker = {
     cell.classList.add('cell-just-painted');
   },
 
-  endDrag() {
+  async endDrag() {
     if (!this.isDragging) return;
     this.isDragging = false;
+    this.isSaving = true;
     document.body.classList.remove('is-drag-painting');
-
-    if (this.draggedCells && this.draggedCells.size > 0) {
-      const count = this.draggedCells.size;
+    const updates = [...this.dragUpdates.values()];
+    this.dragUpdates.clear();
+    this.draggedCells.clear();
+    try {
+      await App.runAction(async () => {
+        await Storage.batchSetRecords(updates);
+        if (updates.length > 1) App.showToast(`Đã lưu ${updates.length} ô điểm danh.`, 'success');
+      });
+    } finally {
+      this.isSaving = false;
       this.render();
-      if (window.Checkin && Checkin.selectedDate) {
-        Checkin.render();
-      }
-      if (window.Payment) {
-        Payment.render();
-      }
-      if (count > 1) {
-        const actionText = (this.dragTargetValue === 1) ? 'Đã đánh dấu ăn' : 'Đã bỏ chọn';
-        App.showToast(`${actionText} ${count} ngày liên tiếp!`, 'success');
-      }
-      this.draggedCells.clear();
+      if (window.Checkin?.selectedDate) Checkin.render();
+      if (window.Payment) Payment.render();
     }
   },
 
@@ -560,43 +568,45 @@ const Tracker = {
   },
 
   saveCellEdit() {
-    if (!this.selectedCell) return;
+    return App.runAction(async () => {
+      if (!this.selectedCell) return;
 
-    const isEating = document.getElementById('radioEatYes').checked;
-    const qty = isEating ? Math.max(1, parseInt(document.getElementById('inputCellQuantity').value) || 1) : 0;
-    const note = document.getElementById('inputCellNote').value.trim();
-    const inputPrice = document.getElementById('inputCellPrice');
-    const defaultPrice = Storage.getSettings().mealPrice || 30000;
-    const enteredPrice = (inputPrice && inputPrice.value) ? Number(inputPrice.value) : null;
-    const finalPrice = (enteredPrice !== null && enteredPrice > 0 && enteredPrice !== defaultPrice) ? enteredPrice : null;
+      const isEating = document.getElementById('radioEatYes').checked;
+      const qty = isEating ? Math.max(1, parseInt(document.getElementById('inputCellQuantity').value) || 1) : 0;
+      const note = document.getElementById('inputCellNote').value.trim();
+      const inputPrice = document.getElementById('inputCellPrice');
+      const defaultPrice = Storage.getSettings().mealPrice || 30000;
+      const enteredPrice = (inputPrice && inputPrice.value) ? Number(inputPrice.value) : null;
+      const finalPrice = (enteredPrice !== null && enteredPrice > 0 && enteredPrice !== defaultPrice) ? enteredPrice : null;
 
-    const isClearing = !!document.getElementById('radioEatClear')?.checked;
-    if (qty > 0) {
-      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: qty, note, price: finalPrice });
-    } else if (isClearing) {
-      // "Để trống": remove the record entirely (past workdays will still auto-show ✕)
-      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, null);
-    } else {
-      Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: 0, note });
-    }
+      const isClearing = !!document.getElementById('radioEatClear')?.checked;
+      if (qty > 0) {
+        await Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: qty, note, price: finalPrice });
+      } else if (isClearing) {
+        // "Để trống": remove the record entirely (past workdays will still auto-show ✕)
+        await Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, null);
+      } else {
+        await Storage.setRecord(this.selectedCell.dateStr, this.selectedCell.memberId, { count: 0, note });
+      }
 
-    App.closeModal('modalCellEdit');
-    App.showToast('Đã cập nhật suất ăn thành công!', 'success');
+      App.closeModal('modalCellEdit');
+      App.showToast('Đã cập nhật suất ăn thành công!', 'success');
 
-    this.render();
-    if (window.Checkin && Checkin.selectedDate === this.selectedCell.dateStr) {
-      Checkin.render();
-    }
-    if (window.Payment) {
-      Payment.render();
-    }
+      this.render();
+      if (window.Checkin && Checkin.selectedDate === this.selectedCell.dateStr) {
+        Checkin.render();
+      }
+      if (window.Payment) {
+        Payment.render();
+      }
+    }, document.getElementById('btnSaveCellEdit'));
   },
 
   updateMetrics(totalMeals, totalAmount, totalPaid, unitPrice, memberCount, unpaidCount = 0, totalMissingDebt = 0) {
     document.getElementById('metricTotalMeals').textContent = totalMeals.toLocaleString('vi-VN');
     document.getElementById('metricTotalAmount').textContent = totalAmount.toLocaleString('vi-VN');
     document.getElementById('metricTotalPaid').textContent = totalPaid.toLocaleString('vi-VN');
-    
+
     document.getElementById('metricTotalDebt').textContent = totalMissingDebt.toLocaleString('vi-VN');
 
     const percent = totalAmount > 0 ? Math.min(100, Math.round((totalPaid / totalAmount) * 100)) : 0;
@@ -604,12 +614,12 @@ const Tracker = {
     document.getElementById('metricPaidPercentText').textContent = `${percent}%`;
 
     document.getElementById('metricActiveMembersText').textContent = `Đang có ${memberCount} người tham gia`;
-    
+
     const avg = memberCount > 0 ? Math.round(totalAmount / memberCount) : 0;
     document.getElementById('metricAveragePerPerson').textContent = `Trung bình ${avg.toLocaleString('vi-VN')}đ / người`;
 
     document.getElementById('metricUnpaidPersons').textContent = `${unpaidCount} người chưa nộp đủ`;
-    
+
     // Update badge on header nav
     const unpaidBadge = document.getElementById('unpaidCountBadge');
     if (unpaidBadge) {
